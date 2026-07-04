@@ -105,6 +105,9 @@ export default function DashboardPage() {
                         <Link className="text-indigo-400" href="/character/create">
                             Create Character
                         </Link>
+                        <Link className="text-indigo-400" href="/character/select">
+                            Select Character
+                        </Link>
                     </div>
                 </div>
             </main>

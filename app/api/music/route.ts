@@ -7,6 +7,7 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import Busboy from "busboy";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserFromCookie } from "@/lib/auth";
+import { apiPath } from "@/lib/paths";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -65,7 +66,7 @@ function getTrackId(userId: string, fileName: string) {
 }
 
 function getTrackUrl(trackId: string) {
-  return `/api/music/stream?id=${encodeURIComponent(trackId)}`;
+  return apiPath(`/api/music/stream?id=${encodeURIComponent(trackId)}`);
 }
 
 function getSafeFileName(fileName: string | null) {

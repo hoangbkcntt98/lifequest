@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { appPath } from "@/lib/paths";
 
 type AppHeaderProps = {
     title: string;
@@ -36,8 +37,13 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
     );
     const [notificationSubscribed, setNotificationSubscribed] = useState(false);
     const [notificationLoading, setNotificationLoading] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
+        apiFetch<{ user: { role?: string } | null }>("/api/auth/me")
+            .then((data) => setIsAdmin(data.user?.role === "ADMIN"))
+            .catch(() => setIsAdmin(false));
+
         if (!notificationSupported) return;
 
         apiFetch<{ subscribed: boolean }>("/api/push/subscribe")
@@ -92,7 +98,9 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
             const { publicKey } = await apiFetch<{ publicKey: string }>(
                 "/api/push/subscribe"
             );
-            const registration = await navigator.serviceWorker.register("/sw.js");
+            const registration = await navigator.serviceWorker.register(
+                appPath("/sw.js")
+            );
             const subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(publicKey),
@@ -135,6 +143,13 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                     </Link>
 
                     <Link
+                        href="/character/select"
+                        className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-800"
+                    >
+                        Characters
+                    </Link>
+
+                    <Link
                         href="/missions"
                         className="rounded-xl bg-indigo-500 px-4 py-2 font-medium hover:bg-indigo-400"
                     >
@@ -161,6 +176,15 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                     >
                         Calendar
                     </Link>
+
+                    {isAdmin && (
+                        <Link
+                            href="/admin"
+                            className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 font-medium text-amber-700 hover:bg-amber-100"
+                        >
+                            Admin
+                        </Link>
+                    )}
 
                     {notificationSupported && (
                         <button
@@ -209,6 +233,14 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                         </Link>
 
                         <Link
+                            href="/character/select"
+                            onClick={() => setOpen(false)}
+                            className="rounded-xl px-4 py-3 font-medium text-slate-700 hover:bg-slate-800"
+                        >
+                            Characters
+                        </Link>
+
+                        <Link
                             href="/missions"
                             onClick={() => setOpen(false)}
                             className="rounded-xl bg-indigo-500 px-4 py-3 font-medium hover:bg-indigo-400"
@@ -239,6 +271,16 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                         >
                             Calendar
                         </Link>
+
+                        {isAdmin && (
+                            <Link
+                                href="/admin"
+                                onClick={() => setOpen(false)}
+                                className="rounded-xl px-4 py-3 font-medium text-amber-700 hover:bg-amber-100"
+                            >
+                                Admin
+                            </Link>
+                        )}
 
                         {notificationSupported && (
                             <button

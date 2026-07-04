@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserFromCookie } from "@/lib/auth";
 import { getTodayInTokyoDateOnly } from "@/lib/date";
 import { calculateLevelUp } from "@/lib/level";
+import { getSelectedCharacter } from "@/lib/character/session";
 
 type RouteContext = {
   params: Promise<{
@@ -65,14 +66,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const character = await tx.character.findUnique({
-        where: {
-          userId: authUser.userId,
-        },
-      });
+      const character = await getSelectedCharacter(authUser.userId);
 
       if (!character) {
-        throw new Error("Character not found.");
+        throw new Error("Selected character not found.");
       }
 
       const missionLog = await tx.missionLog.create({
@@ -104,7 +101,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
       const updatedCharacter = await tx.character.update({
         where: {
-          userId: authUser.userId,
+          id: character.id,
         },
         data: {
           exp: levelResult.exp,

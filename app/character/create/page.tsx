@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 
 const classes = [
@@ -60,8 +61,8 @@ export default function CreateCharacterPage() {
       });
 
       router.push("/dashboard");
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Cannot create character.");
     } finally {
       setLoading(false);
     }
@@ -75,6 +76,9 @@ export default function CreateCharacterPage() {
           <p className="text-slate-400 mt-2">
             Nhân vật này đại diện cho hành trình phát triển bản thân của bạn.
           </p>
+          <Link href="/character/select" className="mt-3 inline-block text-sm text-indigo-400">
+            Quay lại chọn nhân vật
+          </Link>
         </div>
 
         <form

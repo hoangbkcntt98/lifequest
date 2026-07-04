@@ -1,8 +1,10 @@
+import { apiPath } from "@/lib/paths";
+
 export async function apiFetch<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const response = await fetch(url, {
+  const response = await fetch(apiPath(url), {
     ...options,
     headers: {
       "Content-Type": "application/json",

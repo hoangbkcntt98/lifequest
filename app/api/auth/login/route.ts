@@ -52,6 +52,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const characterCount = await prisma.character.count({
+            where: {
+                userId: user.id,
+            },
+        });
+
         const token = signToken({
             userId: user.id,
             email: user.email,
@@ -62,6 +68,8 @@ export async function POST(request: NextRequest) {
             user: {
                 id: user.id,
                 email: user.email,
+                role: user.role,
+                characterCount,
             },
         });
 

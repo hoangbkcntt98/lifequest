@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import AppHeader from "@/components/AppHeader";
+import { apiPath } from "@/lib/paths";
 
 type MusicTrack = {
   id: string;
@@ -70,7 +71,7 @@ export default function FocusPage() {
   useEffect(() => {
     let ignore = false;
 
-    fetch("/api/music", {
+    fetch(apiPath("/api/music"), {
       credentials: "include",
     })
       .then(async (response) => {
@@ -162,7 +163,7 @@ export default function FocusPage() {
         formData.append("file", file);
 
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/music");
+        xhr.open("POST", apiPath("/api/music"));
         xhr.withCredentials = true;
 
         xhr.upload.onprogress = (event) => {
@@ -237,7 +238,7 @@ export default function FocusPage() {
       setError("");
       setDeletingTrackName(track.id);
       const response = await fetch(
-        `/api/music?id=${encodeURIComponent(track.id)}`,
+        apiPath(`/api/music?id=${encodeURIComponent(track.id)}`),
         {
           method: "DELETE",
           credentials: "include",
@@ -278,7 +279,7 @@ export default function FocusPage() {
       setRenamingTrackName(track.id);
 
       const response = await fetch(
-        `/api/music?id=${encodeURIComponent(track.id)}`,
+        apiPath(`/api/music?id=${encodeURIComponent(track.id)}`),
         {
           method: "PATCH",
           headers: {

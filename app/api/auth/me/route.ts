@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserFromCookie } from "@/lib/auth";
+import { getSelectedCharacter } from "@/lib/character/session";
 
 export async function GET() {
   try {
@@ -15,15 +16,17 @@ export async function GET() {
       );
     }
 
-    const user = await prisma.user.findUnique({
+    const [user, selectedCharacter] = await Promise.all([
+      prisma.user.findUnique({
       where: {
         id: authUser.userId,
       },
       select: {
         id: true,
         email: true,
+        role: true,
         createdAt: true,
-        character: {
+        characters: {
           select: {
             id: true,
             name: true,
@@ -34,7 +37,9 @@ export async function GET() {
           },
         },
       },
-    });
+    }),
+      getSelectedCharacter(authUser.userId),
+    ]);
 
     if (!user) {
       return NextResponse.json(
@@ -46,7 +51,10 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      user,
+      user: {
+        ...user,
+        character: selectedCharacter,
+      },
     });
   } catch (error) {
     console.error("ME_ERROR", error);

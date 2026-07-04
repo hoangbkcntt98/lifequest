@@ -4,6 +4,7 @@ import { getCurrentUserFromCookie } from "@/lib/auth";
 import { getTodayInTokyoDateOnly } from "@/lib/date";
 import { calculateCurrentStreakFromLogs } from "@/lib/streak";
 import { getDailyQuoteIndex } from "@/lib/quote";
+import { getSelectedCharacter, getUserCharacterCount } from "@/lib/character/session";
 
 export async function GET() {
   try {
@@ -20,17 +21,19 @@ export async function GET() {
 
     const today = getTodayInTokyoDateOnly();
 
-    const character = await prisma.character.findUnique({
-      where: {
-        userId: authUser.userId,
-      },
-    });
+    const character = await getSelectedCharacter(authUser.userId);
 
     if (!character) {
+      const characterCount = await getUserCharacterCount(authUser.userId);
+
       return NextResponse.json(
         {
-          message: "Character not found.",
-          needCreateCharacter: true,
+          message:
+            characterCount > 0
+              ? "Please select a character."
+              : "Character not found.",
+          needCreateCharacter: characterCount === 0,
+          needSelectCharacter: characterCount > 0,
         },
         { status: 404 }
       );

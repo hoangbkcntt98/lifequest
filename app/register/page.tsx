@@ -27,9 +27,9 @@ export default function RegisterPage() {
         }),
       });
 
-      router.push("/character/create");
-    } catch (error: any) {
-      setError(error.message);
+      router.push("/character/select");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Cannot register.");
     } finally {
       setLoading(false);
     }

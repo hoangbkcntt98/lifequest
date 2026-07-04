@@ -6,6 +6,7 @@ import {
   formatDateKey,
   getLastNDaysInTokyo,
 } from "@/lib/date";
+import { getSelectedCharacter, getUserCharacterCount } from "@/lib/character/session";
 
 export async function GET() {
   try {
@@ -25,11 +26,7 @@ export async function GET() {
     const endDateExclusive = addDaysUTC(days[days.length - 1], 1);
 
     const [character, logs, activeMissions, attributes] = await Promise.all([
-      prisma.character.findUnique({
-        where: {
-          userId: authUser.userId,
-        },
-      }),
+      getSelectedCharacter(authUser.userId),
 
       prisma.missionLog.findMany({
         where: {
@@ -69,10 +66,16 @@ export async function GET() {
     ]);
 
     if (!character) {
+      const characterCount = await getUserCharacterCount(authUser.userId);
+
       return NextResponse.json(
         {
-          message: "Character not found.",
-          needCreateCharacter: true,
+          message:
+            characterCount > 0
+              ? "Please select a character."
+              : "Character not found.",
+          needCreateCharacter: characterCount === 0,
+          needSelectCharacter: characterCount > 0,
         },
         { status: 404 }
       );

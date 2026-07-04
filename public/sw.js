@@ -1,3 +1,24 @@
+self.LIFEQUEST_BASE_PATH = "/lifequest";
+
+function withBasePath(path) {
+  if (!path || path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+
+  if (!path.startsWith("/")) {
+    return path;
+  }
+
+  if (
+    path === self.LIFEQUEST_BASE_PATH ||
+    path.startsWith(`${self.LIFEQUEST_BASE_PATH}/`)
+  ) {
+    return path;
+  }
+
+  return `${self.LIFEQUEST_BASE_PATH}${path}`;
+}
+
 self.addEventListener("push", (event) => {
   const data = event.data
     ? event.data.json()
@@ -10,10 +31,10 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "LifeQuest", {
       body: data.body || "Bạn có mission cần kiểm tra hôm nay.",
-      icon: "/favicon.ico",
-      badge: "/favicon.ico",
+      icon: withBasePath("/favicon.ico"),
+      badge: withBasePath("/favicon.ico"),
       data: {
-        url: data.url || "/dashboard",
+        url: withBasePath(data.url || "/dashboard"),
       },
     })
   );
@@ -22,7 +43,10 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const targetUrl = new URL(event.notification.data?.url || "/dashboard", self.location.origin).href;
+  const targetUrl = new URL(
+    withBasePath(event.notification.data?.url || "/dashboard"),
+    self.location.origin
+  ).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {

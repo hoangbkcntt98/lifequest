@@ -19,7 +19,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const data = await apiFetch<any>("/api/auth/login", {
+      await apiFetch("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({
           email,
@@ -27,13 +27,9 @@ export default function LoginPage() {
         }),
       });
 
-      if (data.user?.character) {
-        router.push("/dashboard");
-      } else {
-        router.push("/character/create");
-      }
-    } catch (error: any) {
-      setError(error.message);
+      router.push("/character/select");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Cannot login.");
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserFromCookie } from "@/lib/auth";
 import { DEFAULT_ATTRIBUTES } from "@/lib/default-attributes";
+import { CHARACTER_COOKIE, getSelectedCharacter } from "@/lib/character/session";
 
 const createCharacterSchema = z.object({
   name: z.string().min(1).max(30),
@@ -24,11 +25,15 @@ export async function GET() {
       );
     }
 
-    const character = await prisma.character.findUnique({
+    const characters = await prisma.character.findMany({
       where: {
         userId: authUser.userId,
       },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
+    const selectedCharacter = await getSelectedCharacter(authUser.userId);
 
     const attributes = await prisma.attribute.findMany({
       where: {
@@ -40,7 +45,9 @@ export async function GET() {
     });
 
     return NextResponse.json({
-      character,
+      character: selectedCharacter,
+      selectedCharacter,
+      characters,
       attributes,
     });
   } catch (error) {
@@ -84,21 +91,6 @@ export async function POST(request: NextRequest) {
 
     const { name, className, avatarUrl } = parsed.data;
 
-    const existingCharacter = await prisma.character.findUnique({
-      where: {
-        userId: authUser.userId,
-      },
-    });
-
-    if (existingCharacter) {
-      return NextResponse.json(
-        {
-          message: "Character already exists.",
-        },
-        { status: 409 }
-      );
-    }
-
     const result = await prisma.$transaction(async (tx) => {
       const character = await tx.character.create({
         data: {
@@ -109,14 +101,29 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const attributes = await tx.attribute.createManyAndReturn({
-        data: DEFAULT_ATTRIBUTES.map((attribute) => ({
+      const existingAttributes = await tx.attribute.count({
+        where: {
           userId: authUser.userId,
-          name: attribute.name,
-          icon: attribute.icon,
-          color: attribute.color,
-        })),
+        },
       });
+      const attributes =
+        existingAttributes === 0
+          ? await tx.attribute.createManyAndReturn({
+              data: DEFAULT_ATTRIBUTES.map((attribute) => ({
+                userId: authUser.userId,
+                name: attribute.name,
+                icon: attribute.icon,
+                color: attribute.color,
+              })),
+            })
+          : await tx.attribute.findMany({
+              where: {
+                userId: authUser.userId,
+              },
+              orderBy: {
+                createdAt: "asc",
+              },
+            });
 
       return {
         character,
@@ -124,7 +131,7 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         message: "Character created successfully.",
         character: result.character,
@@ -132,6 +139,15 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
+    response.cookies.set(CHARACTER_COOKIE, result.character.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.COOKIE_SECURE === "true",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    return response;
   } catch (error) {
     console.error("CREATE_CHARACTER_ERROR", error);
 
