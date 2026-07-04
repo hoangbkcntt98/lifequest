@@ -115,6 +115,17 @@ export async function POST(request: NextRequest) {
     }
 
     const reward = getMissionRewardByDifficulty(difficulty);
+    const parsedStartDate = startDate ? new Date(startDate) : null;
+    const parsedEndDate = endDate ? new Date(endDate) : null;
+
+    if (parsedStartDate && parsedEndDate && parsedEndDate < parsedStartDate) {
+      return NextResponse.json(
+        {
+          message: "Due date must be after start date.",
+        },
+        { status: 400 }
+      );
+    }
 
     const mission = await prisma.mission.create({
       data: {
@@ -124,8 +135,8 @@ export async function POST(request: NextRequest) {
         description,
         difficulty,
         repeatType,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
+        startDate: parsedStartDate,
+        endDate: parsedEndDate,
         expReward: reward.expReward,
         goldReward: reward.goldReward,
         statReward: reward.statReward,

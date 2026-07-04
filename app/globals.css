@@ -119,3 +119,24 @@ body {
 .rounded-xl {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.75) inset;
 }
+
+.lifequest-spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(79, 70, 229, 0.18);
+  border-top-color: #4f46e5;
+  border-radius: 9999px;
+  animation: lifequest-spin 0.75s linear infinite;
+}
+
+.lifequest-spinner.light {
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+}
+
+@keyframes lifequest-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

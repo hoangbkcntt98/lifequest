@@ -7,6 +7,7 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import Busboy from "busboy";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserFromCookie } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
@@ -26,10 +27,16 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 type MusicTrack = {
+  id: string;
   name: string;
   url: string;
   size: number;
   uploadedAt: string;
+  uploadedBy: {
+    id: string;
+    email: string;
+  };
+  canManage: boolean;
 };
 
 type UploadResult = {
@@ -53,8 +60,12 @@ function getUserMusicDir(userId: string) {
   return path.join(UPLOAD_ROOT, userId);
 }
 
-function getTrackUrl(fileName: string) {
-  return `/api/music/stream?file=${encodeURIComponent(fileName)}`;
+function getTrackId(userId: string, fileName: string) {
+  return `${userId}/${fileName}`;
+}
+
+function getTrackUrl(trackId: string) {
+  return `/api/music/stream?id=${encodeURIComponent(trackId)}`;
 }
 
 function getSafeFileName(fileName: string | null) {
@@ -63,6 +74,28 @@ function getSafeFileName(fileName: string | null) {
   }
 
   return fileName;
+}
+
+function getSafeTrackId(trackId: string | null) {
+  if (!trackId) return null;
+
+  const [ownerId, ...fileNameParts] = trackId.split("/");
+  const fileName = fileNameParts.join("/");
+
+  if (
+    !ownerId ||
+    ownerId !== path.basename(ownerId) ||
+    !fileName ||
+    fileName !== path.basename(fileName)
+  ) {
+    return null;
+  }
+
+  return {
+    ownerId,
+    fileName,
+    id: getTrackId(ownerId, fileName),
+  };
 }
 
 function sanitizeRename(name: string, currentFileName: string) {
@@ -80,26 +113,54 @@ function sanitizeRename(name: string, currentFileName: string) {
   return `${baseName || "track"}${ext}`;
 }
 
-async function listTracks(userId: string): Promise<MusicTrack[]> {
-  const userDir = getUserMusicDir(userId);
-
+async function listTracks(currentUserId: string): Promise<MusicTrack[]> {
   try {
-    const entries = await readdir(userDir, { withFileTypes: true });
-    const tracks = await Promise.all(
-      entries
-        .filter((entry) => entry.isFile())
-        .map(async (entry) => {
-          const filePath = path.join(userDir, entry.name);
-          const info = await stat(filePath);
+    const ownerDirs = (await readdir(UPLOAD_ROOT, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+    const users = await prisma.user.findMany({
+      where: {
+        id: {
+          in: ownerDirs,
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+      },
+    });
+    const userById = new Map(users.map((user) => [user.id, user]));
+    const tracksByOwner = await Promise.all(
+      ownerDirs.map(async (ownerId) => {
+        const userDir = getUserMusicDir(ownerId);
+        const entries = await readdir(userDir, { withFileTypes: true });
 
-          return {
-            name: entry.name,
-            url: getTrackUrl(entry.name),
-            size: info.size,
-            uploadedAt: info.birthtime.toISOString(),
-          };
-        })
+        return Promise.all(
+          entries
+            .filter((entry) => entry.isFile())
+            .map(async (entry) => {
+              const filePath = path.join(userDir, entry.name);
+              const info = await stat(filePath);
+              const id = getTrackId(ownerId, entry.name);
+              const uploader = userById.get(ownerId);
+
+              return {
+                id,
+                name: entry.name,
+                url: getTrackUrl(id),
+                size: info.size,
+                uploadedAt: info.birthtime.toISOString(),
+                uploadedBy: {
+                  id: ownerId,
+                  email: uploader?.email ?? "Unknown user",
+                },
+                canManage: ownerId === currentUserId,
+              };
+            })
+        );
+      })
     );
+    const tracks = tracksByOwner.flat();
 
     return tracks.sort(
       (a, b) =>
@@ -122,12 +183,33 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
     }
 
-    const fileName = getSafeFileName(request.nextUrl.searchParams.get("file"));
+    const trackRef =
+      getSafeTrackId(request.nextUrl.searchParams.get("id")) ??
+      (() => {
+        const legacyFileName = getSafeFileName(
+          request.nextUrl.searchParams.get("file")
+        );
 
-    if (!fileName) {
+        return legacyFileName
+          ? {
+              ownerId: authUser.userId,
+              fileName: legacyFileName,
+              id: getTrackId(authUser.userId, legacyFileName),
+            }
+          : null;
+      })();
+
+    if (!trackRef) {
       return NextResponse.json(
-        { message: "Invalid file name." },
+        { message: "Invalid track id." },
         { status: 400 }
+      );
+    }
+
+    if (trackRef.ownerId !== authUser.userId) {
+      return NextResponse.json(
+        { message: "Only the uploader can rename this track." },
+        { status: 403 }
       );
     }
 
@@ -143,17 +225,39 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const userDir = getUserMusicDir(authUser.userId);
-    const nextFileName = sanitizeRename(nextName, fileName);
+    const userDir = getUserMusicDir(trackRef.ownerId);
+    const nextFileName = sanitizeRename(nextName, trackRef.fileName);
 
-    if (nextFileName !== fileName) {
-      await rename(path.join(userDir, fileName), path.join(userDir, nextFileName));
+    if (nextFileName !== trackRef.fileName) {
+      const nextFilePath = path.join(userDir, nextFileName);
+      const targetExists = await stat(nextFilePath)
+        .then(() => true)
+        .catch((error) => {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return false;
+          }
+
+          throw error;
+        });
+
+      if (targetExists) {
+        return NextResponse.json(
+          { message: "A track with that name already exists." },
+          { status: 409 }
+        );
+      }
+
+      await rename(
+        path.join(userDir, trackRef.fileName),
+        nextFilePath
+      );
     }
 
     const tracks = await listTracks(authUser.userId);
+    const nextTrackId = getTrackId(trackRef.ownerId, nextFileName);
 
     return NextResponse.json({
-      track: tracks.find((track) => track.name === nextFileName),
+      track: tracks.find((track) => track.id === nextTrackId),
       tracks,
     });
   } catch (error) {
@@ -314,9 +418,10 @@ export async function POST(request: NextRequest) {
 
     const { fileName } = await parseStreamingUpload(request, authUser.userId);
     const tracks = await listTracks(authUser.userId);
+    const trackId = getTrackId(authUser.userId, fileName);
 
     return NextResponse.json({
-      track: tracks.find((track) => track.name === fileName),
+      track: tracks.find((track) => track.id === trackId),
       tracks,
     });
   } catch (error) {
@@ -351,16 +456,37 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
     }
 
-    const fileName = getSafeFileName(request.nextUrl.searchParams.get("file"));
+    const trackRef =
+      getSafeTrackId(request.nextUrl.searchParams.get("id")) ??
+      (() => {
+        const legacyFileName = getSafeFileName(
+          request.nextUrl.searchParams.get("file")
+        );
 
-    if (!fileName) {
+        return legacyFileName
+          ? {
+              ownerId: authUser.userId,
+              fileName: legacyFileName,
+              id: getTrackId(authUser.userId, legacyFileName),
+            }
+          : null;
+      })();
+
+    if (!trackRef) {
       return NextResponse.json(
-        { message: "Invalid file name." },
+        { message: "Invalid track id." },
         { status: 400 }
       );
     }
 
-    await unlink(path.join(getUserMusicDir(authUser.userId), fileName));
+    if (trackRef.ownerId !== authUser.userId) {
+      return NextResponse.json(
+        { message: "Only the uploader can delete this track." },
+        { status: 403 }
+      );
+    }
+
+    await unlink(path.join(getUserMusicDir(trackRef.ownerId), trackRef.fileName));
 
     const tracks = await listTracks(authUser.userId);
 

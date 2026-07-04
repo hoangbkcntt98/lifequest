@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
 type AppHeaderProps = {
@@ -10,10 +10,40 @@ type AppHeaderProps = {
     subtitle?: string;
 };
 
+function urlBase64ToUint8Array(value: string) {
+    const padding = "=".repeat((4 - (value.length % 4)) % 4);
+    const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let index = 0; index < rawData.length; index += 1) {
+        outputArray[index] = rawData.charCodeAt(index);
+    }
+
+    return outputArray;
+}
+
 export default function AppHeader({ title, subtitle }: AppHeaderProps) {
     const router = useRouter();
     const [open, setOpen] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
+    const [notificationSupported] = useState(
+        () =>
+            typeof window !== "undefined" &&
+            "serviceWorker" in navigator &&
+            "PushManager" in window &&
+            "Notification" in window
+    );
+    const [notificationSubscribed, setNotificationSubscribed] = useState(false);
+    const [notificationLoading, setNotificationLoading] = useState(false);
+
+    useEffect(() => {
+        if (!notificationSupported) return;
+
+        apiFetch<{ subscribed: boolean }>("/api/push/subscribe")
+            .then((data) => setNotificationSubscribed(data.subscribed))
+            .catch(() => setNotificationSubscribed(false));
+    }, [notificationSupported]);
 
     async function handleLogout() {
         setLoggingOut(true);
@@ -28,6 +58,54 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
             router.push("/login");
         } finally {
             setLoggingOut(false);
+        }
+    }
+
+    async function handleNotificationToggle() {
+        if (!notificationSupported) return;
+
+        setNotificationLoading(true);
+
+        try {
+            if (notificationSubscribed) {
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.getSubscription();
+
+                await apiFetch("/api/push/subscribe", {
+                    method: "DELETE",
+                    body: JSON.stringify({
+                        endpoint: subscription?.endpoint,
+                    }),
+                });
+
+                await subscription?.unsubscribe();
+                setNotificationSubscribed(false);
+                return;
+            }
+
+            const permission = await Notification.requestPermission();
+
+            if (permission !== "granted") {
+                return;
+            }
+
+            const { publicKey } = await apiFetch<{ publicKey: string }>(
+                "/api/push/subscribe"
+            );
+            const registration = await navigator.serviceWorker.register("/sw.js");
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(publicKey),
+            });
+
+            await apiFetch("/api/push/subscribe", {
+                method: "POST",
+                body: JSON.stringify(subscription),
+            });
+
+            setNotificationSubscribed(true);
+        } finally {
+            setNotificationLoading(false);
         }
     }
 
@@ -83,6 +161,20 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                     >
                         Calendar
                     </Link>
+
+                    {notificationSupported && (
+                        <button
+                            onClick={handleNotificationToggle}
+                            disabled={notificationLoading}
+                            className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-800 disabled:opacity-50"
+                        >
+                            {notificationLoading
+                                ? "..."
+                                : notificationSubscribed
+                                    ? "Notify on"
+                                    : "Notify off"}
+                        </button>
+                    )}
 
                     <button
                         onClick={handleLogout}
@@ -147,6 +239,20 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                         >
                             Calendar
                         </Link>
+
+                        {notificationSupported && (
+                            <button
+                                onClick={handleNotificationToggle}
+                                disabled={notificationLoading}
+                                className="text-left rounded-xl px-4 py-3 font-medium text-slate-700 hover:bg-slate-800 disabled:opacity-50"
+                            >
+                                {notificationLoading
+                                    ? "Updating..."
+                                    : notificationSubscribed
+                                        ? "Notifications on"
+                                        : "Notifications off"}
+                            </button>
+                        )}
 
                         <button
                             onClick={handleLogout}

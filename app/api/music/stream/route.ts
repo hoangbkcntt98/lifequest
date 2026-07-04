@@ -13,6 +13,27 @@ function getUserMusicDir(userId: string) {
   return path.join(UPLOAD_ROOT, userId);
 }
 
+function getSafeTrackId(trackId: string | null) {
+  if (!trackId) return null;
+
+  const [ownerId, ...fileNameParts] = trackId.split("/");
+  const fileName = fileNameParts.join("/");
+
+  if (
+    !ownerId ||
+    ownerId !== path.basename(ownerId) ||
+    !fileName ||
+    fileName !== path.basename(fileName)
+  ) {
+    return null;
+  }
+
+  return {
+    ownerId,
+    fileName,
+  };
+}
+
 function getContentType(fileName: string) {
   const ext = path.extname(fileName).toLowerCase();
 
@@ -39,19 +60,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
     }
 
-    const fileName = request.nextUrl.searchParams.get("file");
+    const trackRef =
+      getSafeTrackId(request.nextUrl.searchParams.get("id")) ??
+      (() => {
+        const fileName = request.nextUrl.searchParams.get("file");
 
-    if (!fileName || fileName !== path.basename(fileName)) {
+        if (!fileName || fileName !== path.basename(fileName)) return null;
+
+        return {
+          ownerId: authUser.userId,
+          fileName,
+        };
+      })();
+
+    if (!trackRef) {
       return NextResponse.json(
-        { message: "Invalid file name." },
+        { message: "Invalid track id." },
         { status: 400 }
       );
     }
 
-    const filePath = path.join(getUserMusicDir(authUser.userId), fileName);
+    const filePath = path.join(
+      getUserMusicDir(trackRef.ownerId),
+      trackRef.fileName
+    );
     const fileInfo = await stat(filePath);
     const range = request.headers.get("range");
-    const contentType = getContentType(fileName);
+    const contentType = getContentType(trackRef.fileName);
 
     if (!range) {
       const stream = createReadStream(filePath);

@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
 
@@ -20,9 +19,25 @@ type Mission = {
     expReward: number;
     goldReward: number;
     statReward: number;
+    startDate?: string | null;
+    endDate?: string | null;
     isActive: boolean;
     attribute: Attribute;
 };
+
+function toDateTime(date: string) {
+    return date ? `${date}T00:00:00.000Z` : null;
+}
+
+function formatMissionDate(date?: string | null) {
+    if (!date) return null;
+
+    return new Date(date).toLocaleDateString("vi-VN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    });
+}
 
 export default function MissionsPage() {
     const [missions, setMissions] = useState<Mission[]>([]);
@@ -33,6 +48,8 @@ export default function MissionsPage() {
     const [description, setDescription] = useState("");
     const [difficulty, setDifficulty] = useState("NORMAL");
     const [repeatType, setRepeatType] = useState("DAILY");
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
 
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
@@ -71,6 +88,8 @@ export default function MissionsPage() {
                     description: description || null,
                     difficulty,
                     repeatType,
+                    startDate: toDateTime(startDate),
+                    endDate: toDateTime(endDate),
                 }),
             });
 
@@ -78,6 +97,8 @@ export default function MissionsPage() {
             setDescription("");
             setDifficulty("NORMAL");
             setRepeatType("DAILY");
+            setStartDate("");
+            setEndDate("");
 
             await loadData();
         } catch (error: any) {
@@ -205,6 +226,29 @@ export default function MissionsPage() {
                             </div>
                         </div>
 
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                                <label className="text-sm text-slate-300">Start date</label>
+                                <input
+                                    className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 outline-none focus:border-indigo-500"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    type="date"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm text-slate-300">Due date</label>
+                                <input
+                                    className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 outline-none focus:border-indigo-500"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    type="date"
+                                    min={startDate || undefined}
+                                />
+                            </div>
+                        </div>
+
                         <button
                             disabled={loading || !attributeId}
                             className="w-full rounded-xl bg-indigo-500 py-3 font-medium hover:bg-indigo-400 disabled:opacity-50"
@@ -254,6 +298,18 @@ export default function MissionsPage() {
                                                 {mission.repeatType} · +{mission.expReward} EXP · +
                                                 {mission.goldReward} Gold · Stat +{mission.statReward}
                                             </div>
+
+                                            {(mission.startDate || mission.endDate) && (
+                                                <div className="text-sm text-slate-400 mt-2">
+                                                    {mission.startDate
+                                                        ? `Start ${formatMissionDate(mission.startDate)}`
+                                                        : "Start anytime"}
+                                                    {" · "}
+                                                    {mission.endDate
+                                                        ? `Due ${formatMissionDate(mission.endDate)}`
+                                                        : "No due date"}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="flex gap-2 shrink-0">

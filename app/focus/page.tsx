@@ -4,10 +4,16 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import AppHeader from "@/components/AppHeader";
 
 type MusicTrack = {
+  id: string;
   name: string;
   url: string;
   size: number;
   uploadedAt: string;
+  uploadedBy: {
+    id: string;
+    email: string;
+  };
+  canManage: boolean;
 };
 
 type TimerMode = "focus" | "shortBreak" | "longBreak";
@@ -48,8 +54,11 @@ export default function FocusPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [volume, setVolume] = useState(0.7);
   const [loop, setLoop] = useState(true);
+  const [loadingTracks, setLoadingTracks] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [renamingTrackName, setRenamingTrackName] = useState("");
+  const [deletingTrackName, setDeletingTrackName] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -92,6 +101,11 @@ export default function FocusPage() {
             ? fetchError.message
             : "Cannot load music library."
         );
+      })
+      .finally(() => {
+        if (ignore) return;
+
+        setLoadingTracks(false);
       });
 
     return () => {
@@ -221,8 +235,9 @@ export default function FocusPage() {
 
     try {
       setError("");
+      setDeletingTrackName(track.id);
       const response = await fetch(
-        `/api/music?file=${encodeURIComponent(track.name)}`,
+        `/api/music?id=${encodeURIComponent(track.id)}`,
         {
           method: "DELETE",
           credentials: "include",
@@ -248,6 +263,8 @@ export default function FocusPage() {
           ? deleteError.message
           : "Cannot delete track."
       );
+    } finally {
+      setDeletingTrackName("");
     }
   }
 
@@ -258,9 +275,10 @@ export default function FocusPage() {
     try {
       setError("");
       setMessage("");
+      setRenamingTrackName(track.id);
 
       const response = await fetch(
-        `/api/music?file=${encodeURIComponent(track.name)}`,
+        `/api/music?id=${encodeURIComponent(track.id)}`,
         {
           method: "PATCH",
           headers: {
@@ -294,6 +312,8 @@ export default function FocusPage() {
           ? renameError.message
           : "Cannot rename track."
       );
+    } finally {
+      setRenamingTrackName("");
     }
   }
 
@@ -412,8 +432,13 @@ export default function FocusPage() {
                 </div>
                 <h2 className="mt-1 text-xl font-bold">Focus playlist</h2>
               </div>
-              <label className="cursor-pointer rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold hover:bg-indigo-400">
-                {uploading ? "Uploading..." : "Upload"}
+              <label
+                className={`inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold hover:bg-indigo-400 ${
+                  uploading ? "pointer-events-none opacity-80" : ""
+                }`}
+              >
+                {uploading && <span className="lifequest-spinner light" />}
+                {uploading ? "Uploading" : "Upload"}
                 <input
                   className="hidden"
                   type="file"
@@ -428,7 +453,10 @@ export default function FocusPage() {
               {(uploading || uploadProgress > 0) && (
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
                   <div className="flex items-center justify-between text-sm font-medium">
-                    <span>{uploadProgress >= 100 ? "Processing" : "Uploading"}</span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="lifequest-spinner" />
+                      {uploadProgress >= 100 ? "Processing" : "Uploading"}
+                    </span>
                     <span>{uploadProgress}%</span>
                   </div>
                   <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-800">
@@ -447,8 +475,8 @@ export default function FocusPage() {
               >
                 <option value="">No track selected</option>
                 {tracks.map((track) => (
-                  <option key={track.url} value={track.url}>
-                    {track.name}
+                  <option key={track.id} value={track.url}>
+                    {track.name} - {track.uploadedBy.email}
                   </option>
                 ))}
               </select>
@@ -491,6 +519,9 @@ export default function FocusPage() {
                     {formatSize(selectedTrack.size)} uploaded{" "}
                     {new Date(selectedTrack.uploadedAt).toLocaleDateString()}
                   </div>
+                  <div className="mt-1 text-sm">
+                    Uploaded by {selectedTrack.uploadedBy.email}
+                  </div>
                 </div>
               )}
             </div>
@@ -504,7 +535,7 @@ export default function FocusPage() {
                 <div className="text-sm font-semibold text-indigo-400">
                   Library
                 </div>
-                <h2 className="mt-1 text-xl font-bold">Uploaded tracks</h2>
+                <h2 className="mt-1 text-xl font-bold">Shared tracks</h2>
               </div>
               <div className="text-sm text-slate-400">
                 {tracks.length} track{tracks.length === 1 ? "" : "s"}
@@ -512,7 +543,16 @@ export default function FocusPage() {
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-              {tracks.length === 0 && (
+              {loadingTracks && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-5 text-slate-400">
+                  <div className="inline-flex items-center gap-3">
+                    <span className="lifequest-spinner" />
+                    <span>Loading tracks...</span>
+                  </div>
+                </div>
+              )}
+
+              {!loadingTracks && tracks.length === 0 && (
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-5 text-slate-400">
                   Upload một file nhạc để bắt đầu phiên focus đầu tiên.
                 </div>
@@ -520,7 +560,7 @@ export default function FocusPage() {
 
               {tracks.map((track) => (
                 <div
-                  key={track.url}
+                  key={track.id}
                   className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4"
                 >
                   <button
@@ -531,21 +571,36 @@ export default function FocusPage() {
                     <div className="mt-1 text-sm text-slate-400">
                       {formatSize(track.size)}
                     </div>
+                    <div className="mt-1 text-sm text-slate-400">
+                      Uploaded by {track.uploadedBy.email}
+                    </div>
                   </button>
-                  <div className="flex shrink-0 gap-2">
-                    <button
-                      onClick={() => renameTrack(track)}
-                      className="rounded-lg border border-slate-700 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-800"
-                    >
-                      Rename
-                    </button>
-                    <button
-                      onClick={() => deleteTrack(track)}
-                      className="rounded-lg border border-red-500/30 bg-white px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-500/10"
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  {track.canManage && (
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        onClick={() => renameTrack(track)}
+                        disabled={renamingTrackName === track.id}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-800 disabled:opacity-60"
+                      >
+                        {renamingTrackName === track.id && (
+                          <span className="lifequest-spinner" />
+                        )}
+                        {renamingTrackName === track.id ? "Saving" : "Rename"}
+                      </button>
+                      <button
+                        onClick={() => deleteTrack(track)}
+                        disabled={deletingTrackName === track.id}
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-white px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-60"
+                      >
+                        {deletingTrackName === track.id && (
+                          <span className="lifequest-spinner" />
+                        )}
+                        {deletingTrackName === track.id
+                          ? "Deleting"
+                          : "Delete"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
