@@ -21,3 +21,28 @@ export function getDateOnlyInTokyo(date: Date) {
 
   return new Date(`${tokyoDateString}T00:00:00.000Z`);
 }
+
+export function addDaysUTC(date: Date, days: number) {
+  const result = new Date(date);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+}
+
+export function startOfDateUTC(date: Date) {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+  );
+}
+
+export function getLastNDaysInTokyo(days: number) {
+  const today = getTodayInTokyoDateOnly();
+
+  return Array.from({ length: days }).map((_, index) => {
+    const offset = index - (days - 1);
+    return addDaysUTC(today, offset);
+  });
+}
+
+export function formatDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
