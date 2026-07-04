@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CharacterClass {
+  ADVENTURER
+  SCHOLAR
+  WARRIOR
+  MERCHANT
+  MONK
+}
+
+enum MissionDifficulty {
+  EASY
+  NORMAL
+  HARD
+  EPIC
+}
+
+enum MissionRepeatType {
+  DAILY
+  WEEKLY
+  ONCE
+}
+
+enum MissionLogStatus {
+  COMPLETED
+  SKIPPED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  character    Character?
+  attributes   Attribute[]
+  missions     Mission[]
+  missionLogs  MissionLog[]
+
+  @@map("users")
+}
+
+model Character {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+
+  name      String
+  className CharacterClass @default(ADVENTURER)
+  level     Int            @default(1)
+  exp       Int            @default(0)
+  gold      Int            @default(0)
+  avatarUrl String?
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("characters")
+}
+
+model Attribute {
+  id        String   @id @default(cuid())
+  userId    String
+
+  name      String
+  value     Int      @default(0)
+  color     String?
+  icon      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  missions  Mission[]
+
+  @@unique([userId, name])
+  @@map("attributes")
+}
+
+model Mission {
+  id          String              @id @default(cuid())
+  userId      String
+  attributeId String
+
+  title       String
+  description String?
+
+  difficulty  MissionDifficulty  @default(NORMAL)
+  repeatType  MissionRepeatType  @default(DAILY)
+
+  startDate   DateTime?
+  endDate     DateTime?
+
+  expReward   Int                 @default(20)
+  goldReward  Int                 @default(5)
+  statReward  Int                 @default(1)
+
+  isActive    Boolean             @default(true)
+
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attribute   Attribute           @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  logs        MissionLog[]
+
+  @@index([userId])
+  @@index([attributeId])
+  @@map("missions")
+}
+
+model MissionLog {
+  id            String           @id @default(cuid())
+  missionId     String
+  userId        String
+
+  completedDate DateTime
+  status        MissionLogStatus @default(COMPLETED)
+  note          String?
+
+  expEarned     Int
+  goldEarned    Int
+  statEarned    Int              @default(0)
+
+  createdAt     DateTime         @default(now())
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission        Mission         @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@unique([missionId, completedDate])
+  @@index([userId])
+  @@index([completedDate])
+  @@map("mission_logs")
+}
+
+model DailyQuote {
+  id        String   @id @default(cuid())
+
+  content   String
+  author    String?
+  category  String?
+
+  createdAt DateTime @default(now())
+
+  @@map("daily_quotes")
+}

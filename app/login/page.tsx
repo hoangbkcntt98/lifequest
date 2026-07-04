@@ -1,0 +1,99 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { apiFetch } from "@/lib/api";
+
+export default function LoginPage() {
+  const router = useRouter();
+
+  const [email, setEmail] = useState("test@example.com");
+  const [password, setPassword] = useState("123456");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const data = await apiFetch<any>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
+
+      if (data.user?.character) {
+        router.push("/dashboard");
+      } else {
+        router.push("/character/create");
+      }
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 space-y-5"
+      >
+        <div>
+          <h1 className="text-2xl font-bold">Đăng nhập</h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Quay lại tiếp tục chuỗi thói quen.
+          </p>
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <label className="text-sm text-slate-300">Email</label>
+          <input
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 outline-none focus:border-indigo-500"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm text-slate-300">Password</label>
+          <input
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 outline-none focus:border-indigo-500"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            required
+          />
+        </div>
+
+        <button
+          disabled={loading}
+          className="w-full rounded-xl bg-indigo-500 py-3 font-medium hover:bg-indigo-400 disabled:opacity-50"
+        >
+          {loading ? "Đang đăng nhập..." : "Login"}
+        </button>
+
+        <p className="text-sm text-slate-400 text-center">
+          Chưa có tài khoản?{" "}
+          <Link href="/register" className="text-indigo-400 hover:underline">
+            Tạo tài khoản
+          </Link>
+        </p>
+      </form>
+    </main>
+  );
+}
