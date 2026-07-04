@@ -36,11 +36,11 @@ type CalendarData = {
 };
 
 function getIntensityClass(intensity: number) {
-  if (intensity === 0) return "bg-slate-950 border-slate-800";
-  if (intensity === 1) return "bg-emerald-950/60 border-emerald-900/60";
-  if (intensity === 2) return "bg-emerald-800/60 border-emerald-700/60";
-  if (intensity === 3) return "bg-emerald-600/70 border-emerald-500/60";
-  return "bg-emerald-400/80 border-emerald-300/60 text-slate-950";
+  if (intensity === 0) return "bg-white border-slate-800";
+  if (intensity === 1) return "bg-emerald-50 border-emerald-200 text-emerald-900";
+  if (intensity === 2) return "bg-emerald-100 border-emerald-300 text-emerald-950";
+  if (intensity === 3) return "bg-emerald-200 border-emerald-400 text-emerald-950";
+  return "bg-emerald-400 border-emerald-500 text-emerald-950";
 }
 
 export default function CalendarPage() {

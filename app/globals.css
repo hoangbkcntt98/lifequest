@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #172033;
+  --surface: #ffffff;
+  --surface-soft: #f1f7ff;
+  --line: #dce6f3;
+  --muted: #64748b;
+  --brand: #4f46e5;
+  --brand-strong: #4338ca;
+  --success: #059669;
+  --gold: #d97706;
 }
 
 @theme inline {
@@ -12,15 +20,102 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background:
+    radial-gradient(circle at top left, rgba(251, 191, 36, 0.2), transparent 32rem),
+    radial-gradient(circle at top right, rgba(79, 70, 229, 0.13), transparent 34rem),
+    linear-gradient(180deg, #fffdf7 0%, #f8fafc 42%, #eef6ff 100%);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+::selection {
+  background: #fef3c7;
+  color: #111827;
+}
+
+/* Bright LifeQuest theme overrides for the existing utility-heavy UI. */
+.bg-slate-950 {
+  background-color: #f8fbff !important;
+}
+
+.bg-slate-900 {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.bg-slate-800 {
+  background-color: #e8f0fb !important;
+}
+
+.bg-indigo-500 {
+  background-image: linear-gradient(135deg, #4f46e5, #0ea5e9) !important;
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(79, 70, 229, 0.22);
+}
+
+.hover\:bg-indigo-400:hover {
+  background-image: linear-gradient(135deg, #4338ca, #0284c7) !important;
+  background-color: #4338ca !important;
+}
+
+.border-slate-800,
+.border-slate-700 {
+  border-color: var(--line) !important;
+}
+
+.text-white {
+  color: var(--foreground) !important;
+}
+
+.text-slate-300,
+.text-slate-400 {
+  color: var(--muted) !important;
+}
+
+.text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.text-indigo-300,
+.text-indigo-400 {
+  color: var(--brand) !important;
+}
+
+.text-red-300 {
+  color: #dc2626 !important;
+}
+
+.text-emerald-300 {
+  color: #047857 !important;
+}
+
+.bg-emerald-500\/10,
+.bg-emerald-500\/20 {
+  background-color: #dcfce7 !important;
+}
+
+.border-emerald-500\/30 {
+  border-color: #86efac !important;
+}
+
+.bg-red-500\/10 {
+  background-color: #fee2e2 !important;
+}
+
+.border-red-500\/30 {
+  border-color: #fecaca !important;
+}
+
+.hover\:bg-slate-800:hover {
+  background-color: #eaf2ff !important;
+}
+
+.shadow-xl {
+  box-shadow: 0 24px 55px rgba(15, 23, 42, 0.12) !important;
+}
+
+.rounded-2xl,
+.rounded-xl {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.75) inset;
 }

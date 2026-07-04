@@ -1,0 +1,557 @@
+"use client";
+
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import AppHeader from "@/components/AppHeader";
+
+type MusicTrack = {
+  name: string;
+  url: string;
+  size: number;
+  uploadedAt: string;
+};
+
+type TimerMode = "focus" | "shortBreak" | "longBreak";
+
+const TIMER_PRESETS: Record<TimerMode, { label: string; minutes: number }> = {
+  focus: { label: "Focus", minutes: 25 },
+  shortBreak: { label: "Short break", minutes: 5 },
+  longBreak: { label: "Long break", minutes: 15 },
+};
+const MAX_AUDIO_FILE_SIZE = 350 * 1024 * 1024;
+
+function formatTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+    2,
+    "0"
+  )}`;
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export default function FocusPage() {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [tracks, setTracks] = useState<MusicTrack[]>([]);
+  const [selectedTrackUrl, setSelectedTrackUrl] = useState("");
+  const [mode, setMode] = useState<TimerMode>("focus");
+  const [secondsLeft, setSecondsLeft] = useState(TIMER_PRESETS.focus.minutes * 60);
+  const [running, setRunning] = useState(false);
+  const [completedSessions, setCompletedSessions] = useState(0);
+  const [focusMode, setFocusMode] = useState(false);
+  const [volume, setVolume] = useState(0.7);
+  const [loop, setLoop] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const selectedTrack = useMemo(
+    () => tracks.find((track) => track.url === selectedTrackUrl),
+    [selectedTrackUrl, tracks]
+  );
+
+  useEffect(() => {
+    let ignore = false;
+
+    fetch("/api/music", {
+      credentials: "include",
+    })
+      .then(async (response) => {
+        const data = (await response.json().catch(() => null)) as
+          | { tracks?: MusicTrack[]; message?: string }
+          | null;
+
+        if (!response.ok) {
+          throw new Error(data?.message || "Cannot load music library.");
+        }
+
+        return data?.tracks ?? [];
+      })
+      .then((nextTracks) => {
+        if (ignore) return;
+
+        setTracks(nextTracks);
+
+        if (nextTracks.length > 0) {
+          setSelectedTrackUrl(nextTracks[0].url);
+        }
+      })
+      .catch((fetchError) => {
+        if (ignore) return;
+
+        setError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Cannot load music library."
+        );
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    if (!running) return;
+
+    const timer = window.setInterval(() => {
+      setSecondsLeft((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer);
+          setRunning(false);
+          setMessage(`${TIMER_PRESETS[mode].label} session complete.`);
+
+          if (mode === "focus") {
+            setCompletedSessions((count) => count + 1);
+          }
+
+          return 0;
+        }
+
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [mode, running]);
+
+  function switchMode(nextMode: TimerMode) {
+    setMode(nextMode);
+    setRunning(false);
+    setSecondsLeft(TIMER_PRESETS[nextMode].minutes * 60);
+    setMessage("");
+  }
+
+  function resetTimer() {
+    setRunning(false);
+    setSecondsLeft(TIMER_PRESETS[mode].minutes * 60);
+    setMessage("");
+  }
+
+  function uploadTrack(file: File) {
+    return new Promise<{ tracks?: MusicTrack[]; track?: MusicTrack; message?: string }>(
+      (resolve, reject) => {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/music");
+        xhr.withCredentials = true;
+
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+
+          setUploadProgress(Math.round((event.loaded / event.total) * 100));
+        };
+
+        xhr.onload = () => {
+          const data = JSON.parse(xhr.responseText || "null") as
+            | { tracks?: MusicTrack[]; track?: MusicTrack; message?: string }
+            | null;
+
+          if (xhr.status < 200 || xhr.status >= 300) {
+            reject(new Error(data?.message || "Upload failed."));
+            return;
+          }
+
+          resolve(data ?? {});
+        };
+
+        xhr.onerror = () => reject(new Error("Upload failed."));
+        xhr.onabort = () => reject(new Error("Upload cancelled."));
+        xhr.send(formData);
+      }
+    );
+  }
+
+  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_AUDIO_FILE_SIZE) {
+      setError("Audio file must be 350MB or smaller.");
+      event.target.value = "";
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    setError("");
+    setMessage("");
+
+    try {
+      const data = await uploadTrack(file);
+
+      const nextTracks = data?.tracks ?? [];
+      setTracks(nextTracks);
+
+      if (data?.track) {
+        setSelectedTrackUrl(data.track.url);
+      }
+
+      setMessage("Track uploaded. Your focus playlist is ready.");
+      event.target.value = "";
+      setUploadProgress(100);
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error ? uploadError.message : "Upload failed."
+      );
+    } finally {
+      setUploading(false);
+      window.setTimeout(() => setUploadProgress(0), 1200);
+    }
+  }
+
+  async function deleteTrack(track: MusicTrack) {
+    const ok = window.confirm(`Xóa track "${track.name}"?`);
+    if (!ok) return;
+
+    try {
+      setError("");
+      const response = await fetch(
+        `/api/music?file=${encodeURIComponent(track.name)}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        }
+      );
+      const data = (await response.json().catch(() => null)) as
+        | { tracks?: MusicTrack[]; message?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Cannot delete track.");
+      }
+
+      const nextTracks = data?.tracks ?? [];
+      setTracks(nextTracks);
+
+      if (track.url === selectedTrackUrl) {
+        setSelectedTrackUrl(nextTracks[0]?.url ?? "");
+      }
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Cannot delete track."
+      );
+    }
+  }
+
+  async function renameTrack(track: MusicTrack) {
+    const nextName = window.prompt("Tên track mới", track.name);
+    if (!nextName || nextName.trim() === track.name) return;
+
+    try {
+      setError("");
+      setMessage("");
+
+      const response = await fetch(
+        `/api/music?file=${encodeURIComponent(track.name)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: nextName.trim(),
+          }),
+          credentials: "include",
+        }
+      );
+      const data = (await response.json().catch(() => null)) as
+        | { tracks?: MusicTrack[]; track?: MusicTrack; message?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Cannot rename track.");
+      }
+
+      const nextTracks = data?.tracks ?? [];
+      setTracks(nextTracks);
+
+      if (track.url === selectedTrackUrl && data?.track) {
+        setSelectedTrackUrl(data.track.url);
+      }
+
+      setMessage("Track renamed.");
+    } catch (renameError) {
+      setError(
+        renameError instanceof Error
+          ? renameError.message
+          : "Cannot rename track."
+      );
+    }
+  }
+
+  return (
+    <main
+      className={`min-h-screen bg-slate-950 text-white px-6 py-8 ${
+        focusMode ? "fixed inset-0 z-50 overflow-y-auto" : ""
+      }`}
+    >
+      <div className={focusMode ? "mx-auto max-w-4xl space-y-6" : "mx-auto max-w-6xl space-y-6"}>
+        {!focusMode && (
+          <AppHeader
+            title="Focus Studio"
+            subtitle="Bật nhạc, vào flow, hoàn thành một phiên Pomodoro."
+          />
+        )}
+
+        {focusMode && (
+          <div className="flex items-center justify-between rounded-2xl border border-slate-800 bg-white/90 p-4 shadow-xl">
+            <div>
+              <div className="text-sm font-semibold text-indigo-400">Focus Mode</div>
+              <h1 className="text-2xl font-bold">LifeQuest deep work</h1>
+            </div>
+            <button
+              onClick={() => setFocusMode(false)}
+              className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium hover:bg-slate-800"
+            >
+              Exit
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
+            {error}
+          </div>
+        )}
+
+        {message && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-emerald-300">
+            {message}
+          </div>
+        )}
+
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-indigo-400">
+                  Pomodoro
+                </div>
+                <h2 className="mt-1 text-2xl font-bold">
+                  {TIMER_PRESETS[mode].label} sprint
+                </h2>
+              </div>
+
+              <button
+                onClick={() => setFocusMode((value) => !value)}
+                className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium hover:bg-slate-800"
+              >
+                {focusMode ? "Normal view" : "Focus mode"}
+              </button>
+            </div>
+
+            <div className="mt-8 flex flex-col items-center text-center">
+              <div className="rounded-full border-8 border-indigo-100 bg-white px-10 py-12 shadow-xl">
+                <div className="text-6xl font-black text-slate-950 md:text-8xl">
+                  {formatTime(secondsLeft)}
+                </div>
+                <div className="mt-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  {completedSessions} focus sessions completed
+                </div>
+              </div>
+
+              <div className="mt-8 grid w-full max-w-xl grid-cols-3 gap-3">
+                {(Object.keys(TIMER_PRESETS) as TimerMode[]).map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => switchMode(preset)}
+                    className={`rounded-xl border px-3 py-3 text-sm font-semibold ${
+                      mode === preset
+                        ? "border-indigo-500 bg-indigo-500 text-white"
+                        : "border-slate-700 bg-white hover:bg-slate-800"
+                    }`}
+                  >
+                    {TIMER_PRESETS[preset].minutes}m
+                    <span className="block text-xs font-medium opacity-75">
+                      {TIMER_PRESETS[preset].label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <button
+                  onClick={() => setRunning((value) => !value)}
+                  className="rounded-xl bg-indigo-500 px-8 py-3 font-semibold hover:bg-indigo-400"
+                >
+                  {running ? "Pause" : "Start"}
+                </button>
+                <button
+                  onClick={resetTimer}
+                  className="rounded-xl border border-slate-700 bg-white px-8 py-3 font-semibold hover:bg-slate-800"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-indigo-400">
+                  Music
+                </div>
+                <h2 className="mt-1 text-xl font-bold">Focus playlist</h2>
+              </div>
+              <label className="cursor-pointer rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold hover:bg-indigo-400">
+                {uploading ? "Uploading..." : "Upload"}
+                <input
+                  className="hidden"
+                  type="file"
+                  accept="audio/*"
+                  disabled={uploading}
+                  onChange={handleUpload}
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {(uploading || uploadProgress > 0) && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <div className="flex items-center justify-between text-sm font-medium">
+                    <span>{uploadProgress >= 100 ? "Processing" : "Uploading"}</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className="h-full rounded-full bg-indigo-500 transition-all duration-200"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <select
+                value={selectedTrackUrl}
+                onChange={(event) => setSelectedTrackUrl(event.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-indigo-500"
+              >
+                <option value="">No track selected</option>
+                {tracks.map((track) => (
+                  <option key={track.url} value={track.url}>
+                    {track.name}
+                  </option>
+                ))}
+              </select>
+
+              <audio
+                ref={audioRef}
+                controls
+                loop={loop}
+                src={selectedTrackUrl || undefined}
+                className="w-full"
+              />
+
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
+                <span className="font-medium">Volume</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={volume}
+                  onChange={(event) => setVolume(Number(event.target.value))}
+                  className="w-32 accent-indigo-500"
+                />
+              </label>
+
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
+                <span className="font-medium">Loop music</span>
+                <input
+                  type="checkbox"
+                  checked={loop}
+                  onChange={(event) => setLoop(event.target.checked)}
+                  className="h-5 w-5 accent-indigo-500"
+                />
+              </label>
+
+              {selectedTrack && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+                  <div className="font-semibold">{selectedTrack.name}</div>
+                  <div className="mt-1 text-sm">
+                    {formatSize(selectedTrack.size)} uploaded{" "}
+                    {new Date(selectedTrack.uploadedAt).toLocaleDateString()}
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        </section>
+
+        {!focusMode && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-indigo-400">
+                  Library
+                </div>
+                <h2 className="mt-1 text-xl font-bold">Uploaded tracks</h2>
+              </div>
+              <div className="text-sm text-slate-400">
+                {tracks.length} track{tracks.length === 1 ? "" : "s"}
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {tracks.length === 0 && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-5 text-slate-400">
+                  Upload một file nhạc để bắt đầu phiên focus đầu tiên.
+                </div>
+              )}
+
+              {tracks.map((track) => (
+                <div
+                  key={track.url}
+                  className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4"
+                >
+                  <button
+                    onClick={() => setSelectedTrackUrl(track.url)}
+                    className="min-w-0 text-left"
+                  >
+                    <div className="truncate font-semibold">{track.name}</div>
+                    <div className="mt-1 text-sm text-slate-400">
+                      {formatSize(track.size)}
+                    </div>
+                  </button>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      onClick={() => renameTrack(track)}
+                      className="rounded-lg border border-slate-700 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-800"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      onClick={() => deleteTrack(track)}
+                      className="rounded-lg border border-red-500/30 bg-white px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-500/10"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
