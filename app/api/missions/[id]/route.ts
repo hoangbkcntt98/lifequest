@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { MissionDifficulty, MissionRepeatType } from "@prisma/client";
+import { MissionDifficulty, MissionRepeatType, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserFromCookie } from "@/lib/auth";
@@ -13,6 +13,7 @@ const updateMissionSchema = z.object({
   repeatType: z.nativeEnum(MissionRepeatType).optional(),
   startDate: z.string().datetime().optional().nullable(),
   endDate: z.string().datetime().optional().nullable(),
+  goldReward: z.coerce.number().int().min(0).optional().nullable(),
   isActive: z.boolean().optional(),
 });
 
@@ -141,9 +142,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
-    const updateData: any = {
-      ...data,
-    };
+    const updateData: Prisma.MissionUncheckedUpdateInput = {};
+
+    if (data.attributeId !== undefined) updateData.attributeId = data.attributeId;
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.difficulty !== undefined) updateData.difficulty = data.difficulty;
+    if (data.repeatType !== undefined) updateData.repeatType = data.repeatType;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (typeof data.goldReward === "number") updateData.goldReward = data.goldReward;
 
     if (data.startDate !== undefined) {
       updateData.startDate = data.startDate ? new Date(data.startDate) : null;
@@ -157,8 +164,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const reward = getMissionRewardByDifficulty(data.difficulty);
 
       updateData.expReward = reward.expReward;
-      updateData.goldReward = reward.goldReward;
+      updateData.goldReward = data.goldReward ?? reward.goldReward;
       updateData.statReward = reward.statReward;
+    }
+
+    if (data.goldReward === null) {
+      const reward = getMissionRewardByDifficulty(data.difficulty ?? existingMission.difficulty);
+      updateData.goldReward = reward.goldReward;
     }
 
     const mission = await prisma.mission.update({

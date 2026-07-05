@@ -46,3 +46,21 @@ export function getLastNDaysInTokyo(days: number) {
 export function formatDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
+
+export function getCurrentTimeInTokyoHHMM() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+
+  return `${hour}:${minute}`;
+}
+
+export function parseDateOnlyUTC(value: string) {
+  return new Date(`${value}T00:00:00.000Z`);
+}

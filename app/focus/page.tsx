@@ -1,8 +1,16 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import AppHeader from "@/components/AppHeader";
 import { apiPath } from "@/lib/paths";
+import { apiFetch } from "@/lib/api";
 
 type MusicTrack = {
   id: string;
@@ -18,6 +26,34 @@ type MusicTrack = {
 };
 
 type TimerMode = "focus" | "shortBreak" | "longBreak";
+
+type FocusMission = {
+  id: string;
+  title: string;
+  difficulty: string;
+  isActive: boolean;
+  expReward: number;
+  goldReward: number;
+  statReward: number;
+  attribute: {
+    id: string;
+    name: string;
+    icon: string | null;
+    color: string | null;
+  };
+  logs?: {
+    completedDate: string;
+  }[];
+};
+
+type CompleteMissionResponse = {
+  reward: {
+    exp: number;
+    gold: number;
+    stat: number;
+    attributeName: string;
+  };
+};
 
 const TIMER_PRESETS: Record<TimerMode, { label: string; minutes: number }> = {
   focus: { label: "Focus", minutes: 25 },
@@ -44,6 +80,64 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function getTokyoDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+
+  return `${year}-${month}-${day}`;
+}
+
+function isMissionOpenToday(mission: FocusMission) {
+  const todayKey = getTokyoDateKey();
+
+  return (
+    mission.isActive &&
+    !(mission.logs ?? []).some((log) =>
+      log.completedDate.slice(0, 10) === todayKey
+    )
+  );
+}
+
+async function requestFocusNotificationPermission() {
+  if (typeof window === "undefined" || !("Notification" in window)) return;
+  if (Notification.permission !== "default") return;
+
+  await Notification.requestPermission();
+}
+
+async function showFocusCompleteNotification(missionTitle?: string) {
+  if (typeof window === "undefined" || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  const body = missionTitle
+    ? `Bạn vừa hoàn thành một phiên Pomodoro cho "${missionTitle}". Tuyệt vời lắm, tiếp tục cố gắng nhé!`
+    : "Bạn vừa hoàn thành một phiên Pomodoro. Tuyệt vời lắm, hãy tiếp tục cố gắng nhé!";
+
+  const options: NotificationOptions = {
+    body,
+    icon: apiPath("/images/logo.png"),
+    badge: apiPath("/images/logo.png"),
+    data: {
+      url: apiPath("/focus"),
+    },
+  };
+
+  if ("serviceWorker" in navigator) {
+    const registration = await navigator.serviceWorker.register(apiPath("/sw.js"));
+    await registration.showNotification("Pomodoro hoàn thành!", options);
+    return;
+  }
+
+  new Notification("Pomodoro hoàn thành!", options);
+}
+
 export default function FocusPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
@@ -56,6 +150,10 @@ export default function FocusPage() {
   const [volume, setVolume] = useState(0.7);
   const [loop, setLoop] = useState(true);
   const [loadingTracks, setLoadingTracks] = useState(true);
+  const [missions, setMissions] = useState<FocusMission[]>([]);
+  const [selectedMissionId, setSelectedMissionId] = useState("");
+  const [loadingMissions, setLoadingMissions] = useState(true);
+  const [completingMission, setCompletingMission] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [renamingTrackName, setRenamingTrackName] = useState("");
@@ -67,6 +165,45 @@ export default function FocusPage() {
     () => tracks.find((track) => track.url === selectedTrackUrl),
     [selectedTrackUrl, tracks]
   );
+
+  const selectedMission = useMemo(
+    () => missions.find((mission) => mission.id === selectedMissionId),
+    [missions, selectedMissionId]
+  );
+
+  const completeAttachedMission = useCallback(async () => {
+    if (!selectedMissionId || completingMission) return;
+
+    const missionTitle = selectedMission?.title ?? "Attached mission";
+    setCompletingMission(true);
+    setError("");
+
+    try {
+      const result = await apiFetch<CompleteMissionResponse>(
+        `/api/missions/${selectedMissionId}/complete`,
+        {
+          method: "POST",
+        }
+      );
+
+      setMissions((current) =>
+        current.filter((mission) => mission.id !== selectedMissionId)
+      );
+      setSelectedMissionId("");
+      setMessage(
+        `${missionTitle} completed. +${result.reward.exp} EXP, +${result.reward.gold} Gold, +${result.reward.stat} ${result.reward.attributeName}.`
+      );
+    } catch (missionError) {
+      setError(
+        missionError instanceof Error
+          ? missionError.message
+          : "Cannot complete attached mission."
+      );
+      setMessage("Focus session complete, but the attached mission was not completed.");
+    } finally {
+      setCompletingMission(false);
+    }
+  }, [completingMission, selectedMission?.title, selectedMissionId]);
 
   useEffect(() => {
     let ignore = false;
@@ -115,6 +252,44 @@ export default function FocusPage() {
   }, []);
 
   useEffect(() => {
+    let ignore = false;
+
+    apiFetch<{ missions: FocusMission[] }>("/api/missions")
+      .then((data) => {
+        if (ignore) return;
+
+        const activeMissions = data.missions.filter(isMissionOpenToday);
+
+        setMissions(activeMissions);
+        setSelectedMissionId((current) => {
+          if (current && activeMissions.some((mission) => mission.id === current)) {
+            return current;
+          }
+
+          return activeMissions[0]?.id ?? "";
+        });
+      })
+      .catch((missionError) => {
+        if (ignore) return;
+
+        setError(
+          missionError instanceof Error
+            ? missionError.message
+            : "Cannot load missions."
+        );
+      })
+      .finally(() => {
+        if (ignore) return;
+
+        setLoadingMissions(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!audioRef.current) return;
     audioRef.current.volume = volume;
   }, [volume]);
@@ -127,12 +302,13 @@ export default function FocusPage() {
         if (current <= 1) {
           window.clearInterval(timer);
           setRunning(false);
-          setMessage(`${TIMER_PRESETS[mode].label} session complete.`);
 
           if (mode === "focus") {
             setCompletedSessions((count) => count + 1);
+            void showFocusCompleteNotification(selectedMission?.title);
           }
 
+          setMessage(`${TIMER_PRESETS[mode].label} session complete.`);
           return 0;
         }
 
@@ -141,13 +317,26 @@ export default function FocusPage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [mode, running]);
+  }, [mode, running, selectedMission?.title]);
 
   function switchMode(nextMode: TimerMode) {
     setMode(nextMode);
     setRunning(false);
     setSecondsLeft(TIMER_PRESETS[nextMode].minutes * 60);
     setMessage("");
+  }
+
+  function toggleTimer() {
+    if (running) {
+      setRunning(false);
+      return;
+    }
+
+    if (mode === "focus") {
+      void requestFocusNotificationPermission();
+    }
+
+    setRunning(true);
   }
 
   function resetTimer() {
@@ -410,7 +599,7 @@ export default function FocusPage() {
 
               <div className="mt-6 flex flex-wrap justify-center gap-3">
                 <button
-                  onClick={() => setRunning((value) => !value)}
+                  onClick={toggleTimer}
                   className="rounded-xl bg-indigo-500 px-8 py-3 font-semibold hover:bg-indigo-400"
                 >
                   {running ? "Pause" : "Start"}
@@ -421,6 +610,85 @@ export default function FocusPage() {
                 >
                   Reset
                 </button>
+              </div>
+
+              <div className="mt-6 w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-950 p-4 text-left">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-indigo-300">
+                      Attached mission
+                    </div>
+                    <div className="mt-1 text-sm text-slate-400">
+                      Pomodoro focus sessions can complete one mission.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={completeAttachedMission}
+                    disabled={!selectedMissionId || completingMission}
+                    aria-label="Complete attached mission"
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-4"
+                  >
+                    {completingMission ? (
+                      <span className="lifequest-spinner light" />
+                    ) : (
+                      <svg
+                        aria-hidden="true"
+                        className="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2.5"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    )}
+                    <span className="sr-only sm:not-sr-only sm:ml-2">
+                      Complete
+                    </span>
+                  </button>
+                </div>
+
+                <select
+                  value={selectedMissionId}
+                  onChange={(event) => setSelectedMissionId(event.target.value)}
+                  disabled={loadingMissions || completingMission}
+                  className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 outline-none focus:border-indigo-500 disabled:opacity-60"
+                >
+                  <option value="">
+                    {loadingMissions ? "Loading missions..." : "No mission attached"}
+                  </option>
+                  {missions.map((mission) => (
+                    <option key={mission.id} value={mission.id}>
+                      {mission.title} - {mission.attribute.name}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedMission && (
+                  <div className="mt-3 rounded-xl border border-indigo-400/20 bg-indigo-500/10 p-3">
+                    <div className="flex items-center gap-2 font-semibold">
+                      <span>{selectedMission.attribute.icon ?? "✨"}</span>
+                      <span className="min-w-0 truncate">{selectedMission.title}</span>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-300">
+                      +{selectedMission.expReward} EXP · +{selectedMission.goldReward} Gold · +{selectedMission.statReward}{" "}
+                      {selectedMission.attribute.name}
+                    </div>
+                  </div>
+                )}
+
+                {!loadingMissions && missions.length === 0 && (
+                  <div className="mt-3 text-sm text-slate-400">
+                    Chưa có mission active nào để attach.
+                  </div>
+                )}
+
+                <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-slate-400">
+                  Bấm Complete khi bạn muốn nhận reward cho mission đã attach.
+                </div>
               </div>
             </div>
           </div>
@@ -477,7 +745,7 @@ export default function FocusPage() {
                 <option value="">No track selected</option>
                 {tracks.map((track) => (
                   <option key={track.id} value={track.url}>
-                    {track.name} - {track.uploadedBy.email}
+                    {track.name}
                   </option>
                 ))}
               </select>

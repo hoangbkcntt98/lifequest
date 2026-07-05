@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     const { startDate, endDateExclusive } = getMonthRangeUTC(year, month);
     const days = getDaysInMonthUTC(year, month);
 
-    const [logs, activeMissions] = await Promise.all([
+    const [logs, activeMissions, events] = await Promise.all([
       prisma.missionLog.findMany({
         where: {
           userId: authUser.userId,
@@ -98,6 +98,17 @@ export async function GET(request: NextRequest) {
           isActive: true,
         },
       }),
+
+      prisma.calendarEvent.findMany({
+        where: {
+          userId: authUser.userId,
+          startDate: {
+            gte: startDate,
+            lt: endDateExclusive,
+          },
+        },
+        orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
+      }),
     ]);
 
     const logsByDate = new Map<string, typeof logs>();
@@ -112,9 +123,22 @@ export async function GET(request: NextRequest) {
       logsByDate.get(key)!.push(log);
     }
 
+    const eventsByDate = new Map<string, typeof events>();
+
+    for (const event of events) {
+      const key = formatDateKey(event.startDate);
+
+      if (!eventsByDate.has(key)) {
+        eventsByDate.set(key, []);
+      }
+
+      eventsByDate.get(key)!.push(event);
+    }
+
     const calendar = days.map((date) => {
       const key = formatDateKey(date);
       const dayLogs = logsByDate.get(key) ?? [];
+      const dayEvents = eventsByDate.get(key) ?? [];
 
       const completedCount = dayLogs.length;
       const expEarned = dayLogs.reduce((sum, log) => sum + log.expEarned, 0);
@@ -153,6 +177,14 @@ export async function GET(request: NextRequest) {
             stat: log.statEarned,
           },
         })),
+        events: dayEvents.map((event) => ({
+          id: event.id,
+          title: event.title,
+          location: event.location,
+          content: event.content,
+          startDate: event.startDate,
+          endDate: event.endDate,
+        })),
       };
     });
 
@@ -173,6 +205,7 @@ export async function GET(request: NextRequest) {
         activeDays,
         totalDays: calendar.length,
         activeMissionCount: activeMissions.length,
+        eventCount: events.length,
       },
       calendar,
     });

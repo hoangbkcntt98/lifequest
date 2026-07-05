@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
 
@@ -50,11 +50,12 @@ export default function MissionsPage() {
     const [repeatType, setRepeatType] = useState("DAILY");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+    const [customGoldReward, setCustomGoldReward] = useState("");
 
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    async function loadData() {
+    const loadData = useCallback(async () => {
         try {
             const attrData = await apiFetch<{ attributes: Attribute[] }>("/api/attributes");
             const missionData = await apiFetch<{ missions: Mission[] }>("/api/missions");
@@ -65,13 +66,39 @@ export default function MissionsPage() {
             if (!attributeId && attrData.attributes.length > 0) {
                 setAttributeId(attrData.attributes[0].id);
             }
-        } catch (error: any) {
-            setError(error.message);
+        } catch (error: unknown) {
+            setError(error instanceof Error ? error.message : "Cannot load missions.");
         }
-    }
+    }, [attributeId]);
 
     useEffect(() => {
-        loadData();
+        let ignore = false;
+
+        async function loadInitialData() {
+            try {
+                const attrData = await apiFetch<{ attributes: Attribute[] }>("/api/attributes");
+                const missionData = await apiFetch<{ missions: Mission[] }>("/api/missions");
+
+                if (ignore) return;
+
+                setAttributes(attrData.attributes);
+                setMissions(missionData.missions);
+
+                if (attrData.attributes.length > 0) {
+                    setAttributeId((current) => current || attrData.attributes[0].id);
+                }
+            } catch (error: unknown) {
+                if (!ignore) {
+                    setError(error instanceof Error ? error.message : "Cannot load missions.");
+                }
+            }
+        }
+
+        void loadInitialData();
+
+        return () => {
+            ignore = true;
+        };
     }, []);
 
     async function createMission(event: FormEvent) {
@@ -90,6 +117,10 @@ export default function MissionsPage() {
                     repeatType,
                     startDate: toDateTime(startDate),
                     endDate: toDateTime(endDate),
+                    goldReward:
+                        customGoldReward.trim() === ""
+                            ? null
+                            : Number(customGoldReward),
                 }),
             });
 
@@ -99,10 +130,11 @@ export default function MissionsPage() {
             setRepeatType("DAILY");
             setStartDate("");
             setEndDate("");
+            setCustomGoldReward("");
 
             await loadData();
-        } catch (error: any) {
-            setError(error.message);
+        } catch (error: unknown) {
+            setError(error instanceof Error ? error.message : "Cannot create mission.");
         } finally {
             setLoading(false);
         }
@@ -118,8 +150,8 @@ export default function MissionsPage() {
             });
 
             await loadData();
-        } catch (error: any) {
-            setError(error.message);
+        } catch (error: unknown) {
+            setError(error instanceof Error ? error.message : "Cannot update mission.");
         }
     }
 
@@ -133,8 +165,31 @@ export default function MissionsPage() {
             });
 
             await loadData();
-        } catch (error: any) {
-            setError(error.message);
+        } catch (error: unknown) {
+            setError(error instanceof Error ? error.message : "Cannot delete mission.");
+        }
+    }
+
+    async function updateMissionGold(mission: Mission) {
+        const nextGold = window.prompt(
+            "Gold reward mới. Để trống để quay về default theo difficulty.",
+            String(mission.goldReward)
+        );
+
+        if (nextGold === null) return;
+
+        try {
+            setError("");
+            await apiFetch(`/api/missions/${mission.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                    goldReward: nextGold.trim() === "" ? null : Number(nextGold),
+                }),
+            });
+
+            await loadData();
+        } catch (error: unknown) {
+            setError(error instanceof Error ? error.message : "Cannot update mission gold.");
         }
     }
 
@@ -249,6 +304,20 @@ export default function MissionsPage() {
                             </div>
                         </div>
 
+                        <div className="space-y-2">
+                            <label className="text-sm text-slate-300">
+                                Custom gold reward
+                            </label>
+                            <input
+                                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 outline-none focus:border-indigo-500"
+                                value={customGoldReward}
+                                onChange={(e) => setCustomGoldReward(e.target.value)}
+                                type="number"
+                                min="0"
+                                placeholder="Để trống để dùng default"
+                            />
+                        </div>
+
                         <button
                             disabled={loading || !attributeId}
                             className="w-full rounded-xl bg-indigo-500 py-3 font-medium hover:bg-indigo-400 disabled:opacity-50"
@@ -313,6 +382,13 @@ export default function MissionsPage() {
                                         </div>
 
                                         <div className="flex gap-2 shrink-0">
+                                            <button
+                                                onClick={() => updateMissionGold(mission)}
+                                                className="rounded-lg border border-amber-400/40 px-3 py-2 text-sm text-amber-200 hover:bg-amber-500/10"
+                                            >
+                                                Gold
+                                            </button>
+
                                             <button
                                                 onClick={() => toggleMission(mission)}
                                                 className="rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"

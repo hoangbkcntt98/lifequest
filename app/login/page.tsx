@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
@@ -12,6 +12,29 @@ export default function LoginPage() {
   const [password, setPassword] = useState("123456");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let ignore = false;
+
+    apiFetch<{ user: { id: string } | null }>("/api/auth/me")
+      .then((data) => {
+        if (!ignore && data.user) {
+          router.replace("/dashboard");
+        } else if (!ignore) {
+          setCheckingSession(false);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setCheckingSession(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [router]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -33,6 +56,16 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 px-6 py-5 text-slate-300">
+          Đang kiểm tra phiên đăng nhập...
+        </div>
+      </main>
+    );
   }
 
   return (

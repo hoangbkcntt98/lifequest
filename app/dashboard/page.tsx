@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
@@ -32,6 +32,8 @@ type DashboardData = {
         expReward: number;
         goldReward: number;
         statReward: number;
+        startDate?: string | null;
+        endDate?: string | null;
         completed: boolean;
         attribute: {
             id: string;
@@ -39,6 +41,13 @@ type DashboardData = {
             icon?: string | null;
             color?: string | null;
         };
+    }[];
+    todayEvents: {
+        id: string;
+        title: string;
+        location?: string | null;
+        startDate: string;
+        endDate?: string | null;
     }[];
     streak: number;
     quote: {
@@ -48,7 +57,27 @@ type DashboardData = {
     summary: {
         totalMissionsToday: number;
         completedMissionsToday: number;
+        totalEventsToday: number;
         completionRate: number;
+    };
+};
+
+function formatMissionDate(date?: string | null) {
+    if (!date) return null;
+
+    return new Date(date).toLocaleDateString("vi-VN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    });
+}
+
+type CompleteMissionResponse = {
+    reward: {
+        exp: number;
+        gold: number;
+        stat: number;
+        attributeName: string;
     };
 };
 
@@ -57,18 +86,35 @@ export default function DashboardPage() {
     const [error, setError] = useState("");
     const [completingId, setCompletingId] = useState<string | null>(null);
     const [rewardMessage, setRewardMessage] = useState("");
+    const [selectedStatId, setSelectedStatId] = useState<string | null>(null);
 
-    async function loadDashboard() {
+    const loadDashboard = useCallback(async () => {
         try {
             const result = await apiFetch<DashboardData>("/api/dashboard");
             setData(result);
-        } catch (error: any) {
-            setError(error.message);
+        } catch (error: unknown) {
+            setError(error instanceof Error ? error.message : "Cannot load dashboard.");
         }
-    }
+    }, []);
 
     useEffect(() => {
-        loadDashboard();
+        let ignore = false;
+
+        apiFetch<DashboardData>("/api/dashboard")
+            .then((result) => {
+                if (!ignore) {
+                    setData(result);
+                }
+            })
+            .catch((error: unknown) => {
+                if (!ignore) {
+                    setError(error instanceof Error ? error.message : "Cannot load dashboard.");
+                }
+            });
+
+        return () => {
+            ignore = true;
+        };
     }, []);
 
     async function completeMission(id: string) {
@@ -77,7 +123,7 @@ export default function DashboardPage() {
         setError("");
 
         try {
-            const result = await apiFetch<any>(`/api/missions/${id}/complete`, {
+            const result = await apiFetch<CompleteMissionResponse>(`/api/missions/${id}/complete`, {
                 method: "POST",
             });
 
@@ -86,8 +132,8 @@ export default function DashboardPage() {
             );
 
             await loadDashboard();
-        } catch (error: any) {
-            setError(error.message);
+        } catch (error: unknown) {
+            setError(error instanceof Error ? error.message : "Cannot complete mission.");
         } finally {
             setCompletingId(null);
         }
@@ -126,6 +172,7 @@ export default function DashboardPage() {
         100,
         Math.round((data.character.exp / data.character.requiredExp) * 100)
     );
+    const selectedStat = data.attributes.find((attribute) => attribute.id === selectedStatId);
 
     return (
         <main className="min-h-screen bg-slate-950 text-white px-6 py-8">
@@ -149,6 +196,19 @@ export default function DashboardPage() {
 
                 <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 rounded-2xl bg-slate-900 border border-slate-800 p-6">
+                        <div className="mb-4 grid grid-cols-2 gap-3 text-sm">
+                            <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
+                                <div className="text-slate-400">Missions today</div>
+                                <div className="mt-1 text-xl font-bold">
+                                    {data.summary.completedMissionsToday}/{data.summary.totalMissionsToday}
+                                </div>
+                            </div>
+                            <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
+                                <div className="text-slate-400">Events today</div>
+                                <div className="mt-1 text-xl font-bold">{data.summary.totalEventsToday}</div>
+                            </div>
+                        </div>
+
                         <div className="flex items-start justify-between">
                             <div>
                                 <div className="text-sm text-slate-400">
@@ -164,6 +224,23 @@ export default function DashboardPage() {
 
                             <div className="text-5xl">🧙</div>
                         </div>
+
+                        {data.attributes.length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {data.attributes.slice(0, 8).map((attribute) => (
+                                    <button
+                                        key={attribute.id}
+                                        type="button"
+                                        onClick={() => setSelectedStatId(attribute.id)}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-sm font-semibold hover:border-indigo-400"
+                                        title={attribute.name}
+                                    >
+                                        <span>{attribute.icon || "•"}</span>
+                                        <span>{attribute.value}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
                         <div className="mt-6">
                             <div className="flex justify-between text-sm text-slate-400 mb-2">
@@ -189,7 +266,9 @@ export default function DashboardPage() {
 
                             <div className="rounded-xl bg-slate-950 border border-slate-800 p-4">
                                 <div className="text-slate-400 text-sm">Streak</div>
-                                <div className="text-2xl font-bold mt-1">🔥 {data.streak} days</div>
+                                <div className="text-2xl font-bold mt-1">
+                                    🔥 {data.streak} <span className="hidden sm:inline">days</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -225,13 +304,13 @@ export default function DashboardPage() {
                             {data.todayMissions.map((mission) => (
                                 <div
                                     key={mission.id}
-                                    className="rounded-xl bg-slate-950 border border-slate-800 p-4 flex items-center justify-between gap-4"
+                                    className="rounded-xl bg-slate-950 border border-slate-800 p-4"
                                 >
-                                    <div>
-                                        <div className="flex items-center gap-2">
+                                    <div className="space-y-3">
+                                        <div className="flex min-w-0 items-start gap-2">
                                             <span>{mission.attribute.icon}</span>
                                             <h3
-                                                className={`font-semibold ${mission.completed ? "line-through text-slate-500" : ""
+                                                className={`min-w-0 flex-1 font-semibold leading-snug ${mission.completed ? "line-through text-slate-500" : ""
                                                     }`}
                                             >
                                                 {mission.title}
@@ -242,22 +321,37 @@ export default function DashboardPage() {
                                             {mission.attribute.name} · {mission.difficulty} · +
                                             {mission.expReward} EXP · +{mission.goldReward} Gold
                                         </div>
-                                    </div>
 
-                                    <button
-                                        disabled={mission.completed || completingId === mission.id}
-                                        onClick={() => completeMission(mission.id)}
-                                        className={`rounded-xl px-4 py-2 text-sm font-medium ${mission.completed
-                                                ? "bg-emerald-500/20 text-emerald-300"
-                                                : "bg-indigo-500 hover:bg-indigo-400"
-                                            } disabled:opacity-70`}
-                                    >
-                                        {mission.completed
-                                            ? "Done"
-                                            : completingId === mission.id
-                                                ? "..."
-                                                : "Complete"}
-                                    </button>
+                                        <div className="text-xs text-slate-500">
+                                            Start: {formatMissionDate(mission.startDate) ?? "anytime"} · Due:{" "}
+                                            {formatMissionDate(mission.endDate) ?? "none"}
+                                        </div>
+
+                                        <button
+                                            disabled={mission.completed || completingId === mission.id}
+                                            onClick={() => completeMission(mission.id)}
+                                            className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-medium sm:px-4 ${mission.completed
+                                                    ? "bg-emerald-500/20 text-emerald-300"
+                                                    : "bg-indigo-500 hover:bg-indigo-400"
+                                                } disabled:opacity-70`}
+                                            aria-label={mission.completed ? "Done" : "Complete mission"}
+                                        >
+                                            <span className="hidden sm:inline">
+                                                {mission.completed
+                                                    ? "Done"
+                                                    : completingId === mission.id
+                                                        ? "..."
+                                                        : "Complete"}
+                                            </span>
+                                            <span className="sm:hidden" aria-hidden="true">
+                                                {mission.completed
+                                                    ? "✓"
+                                                    : completingId === mission.id
+                                                        ? "..."
+                                                        : "✓"}
+                                            </span>
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -283,6 +377,39 @@ export default function DashboardPage() {
                         </div>
                     </div>
                 </section>
+
+                {selectedStat && (
+                    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4">
+                        <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-white p-6 text-slate-950 shadow-2xl">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <span
+                                        className="grid h-12 w-12 place-items-center rounded-xl text-2xl"
+                                        style={{ backgroundColor: selectedStat.color ?? "#6366f1" }}
+                                    >
+                                        {selectedStat.icon || "•"}
+                                    </span>
+                                    <div>
+                                        <h2 className="text-xl font-bold">{selectedStat.name}</h2>
+                                        <p className="text-sm text-slate-500">Character stat</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedStatId(null)}
+                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+                                    aria-label="Close stat detail"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                <div className="text-sm text-slate-500">Value</div>
+                                <div className="mt-1 text-4xl font-bold">{selectedStat.value}</div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </main>
     );

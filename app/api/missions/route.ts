@@ -13,6 +13,7 @@ const createMissionSchema = z.object({
   repeatType: z.nativeEnum(MissionRepeatType).default(MissionRepeatType.DAILY),
   startDate: z.string().datetime().optional().nullable(),
   endDate: z.string().datetime().optional().nullable(),
+  goldReward: z.coerce.number().int().min(0).optional().nullable(),
 });
 
 export async function GET() {
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
       repeatType,
       startDate,
       endDate,
+      goldReward,
     } = parsed.data;
 
     const attribute = await prisma.attribute.findFirst({
@@ -138,7 +140,7 @@ export async function POST(request: NextRequest) {
         startDate: parsedStartDate,
         endDate: parsedEndDate,
         expReward: reward.expReward,
-        goldReward: reward.goldReward,
+        goldReward: goldReward ?? reward.goldReward,
         statReward: reward.statReward,
       },
       include: {

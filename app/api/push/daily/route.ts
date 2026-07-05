@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { formatDateKey, getCurrentTimeInTokyoHHMM, getTodayInTokyoDateOnly } from "@/lib/date";
 import { getTodayMissionSummary } from "@/lib/notifications/missions";
+import { getPushTemplate, renderTemplate } from "@/lib/notifications/templates";
 import { sendPushToSubscriptions } from "@/lib/notifications/web-push";
 
 export const runtime = "nodejs";
@@ -14,6 +16,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const currentTime = getCurrentTimeInTokyoHHMM();
+    const today = getTodayInTokyoDateOnly();
+    const todayKey = formatDateKey(today);
+
     const users = await prisma.user.findMany({
       where: {
         pushSubscriptions: {
@@ -24,36 +30,128 @@ export async function POST(request: NextRequest) {
         id: true,
         email: true,
         pushSubscriptions: true,
+        notificationSetting: true,
       },
     });
 
     let sent = 0;
     let failed = 0;
+    let skipped = 0;
+
+    const [missionTemplate, eventTemplate] = await Promise.all([
+      getPushTemplate("MISSION_DAILY"),
+      getPushTemplate("EVENT_START"),
+    ]);
 
     for (const user of users) {
-      const summary = await getTodayMissionSummary(user.id);
-      const title =
-        summary.remaining === 0
-          ? "LifeQuest: all clear today"
-          : `LifeQuest: ${summary.remaining} missions left`;
-      const body =
-        summary.remaining === 0
-          ? "Bạn đã hoàn thành toàn bộ mission hôm nay."
-          : `Bạn còn ${summary.remaining}/${summary.total} mission chưa làm hôm nay.`;
+      const settings =
+        user.notificationSetting ??
+        (await prisma.notificationSetting.create({
+          data: { userId: user.id },
+        }));
 
-      const result = await sendPushToSubscriptions(user.pushSubscriptions, {
-        title,
-        body,
-        url: "/dashboard",
-      });
-      sent += result.sent;
-      failed += result.failed;
+      if (settings.missionEnabled && settings.missionTime === currentTime) {
+        const delivered = await prisma.pushNotificationDelivery.findFirst({
+          where: {
+            userId: user.id,
+            type: "MISSION_DAILY",
+            targetDate: today,
+            entityId: null,
+          },
+        });
+
+        if (!delivered) {
+          const summary = await getTodayMissionSummary(user.id);
+          const title = renderTemplate(missionTemplate.title, {
+            remaining: summary.remaining,
+            completed: summary.completed,
+            total: summary.total,
+          });
+          const body = renderTemplate(missionTemplate.body, {
+            remaining: summary.remaining,
+            completed: summary.completed,
+            total: summary.total,
+          });
+
+          const result = await sendPushToSubscriptions(user.pushSubscriptions, {
+            title,
+            body,
+            url: "/dashboard",
+          });
+          sent += result.sent;
+          failed += result.failed;
+
+          await prisma.pushNotificationDelivery.create({
+            data: {
+              userId: user.id,
+              type: "MISSION_DAILY",
+              targetDate: today,
+              entityId: null,
+            },
+          });
+        }
+      } else {
+        skipped += 1;
+      }
+
+      if (settings.eventEnabled && settings.eventTime === currentTime) {
+        const events = await prisma.calendarEvent.findMany({
+          where: {
+            userId: user.id,
+            startDate: today,
+          },
+        });
+
+        for (const event of events) {
+          const delivered = await prisma.pushNotificationDelivery.findFirst({
+            where: {
+              userId: user.id,
+              type: "EVENT_START",
+              targetDate: today,
+              entityId: event.id,
+            },
+          });
+
+          if (delivered) continue;
+
+          const title = renderTemplate(eventTemplate.title, {
+            eventTitle: event.title,
+            location: event.location || "chưa có địa điểm",
+            date: todayKey,
+          });
+          const body = renderTemplate(eventTemplate.body, {
+            eventTitle: event.title,
+            location: event.location || "chưa có địa điểm",
+            date: todayKey,
+            content: event.content || "",
+          });
+
+          const result = await sendPushToSubscriptions(user.pushSubscriptions, {
+            title,
+            body,
+            url: "/calendar",
+          });
+          sent += result.sent;
+          failed += result.failed;
+
+          await prisma.pushNotificationDelivery.create({
+            data: {
+              userId: user.id,
+              type: "EVENT_START",
+              targetDate: today,
+              entityId: event.id,
+            },
+          });
+        }
+      }
     }
 
     return NextResponse.json({
       users: users.length,
+      currentTime,
       sent,
       failed,
+      skipped,
     });
   } catch (error) {
     console.error("PUSH_DAILY_ERROR", error);

@@ -133,101 +133,24 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                     )}
                 </div>
 
-                {/* Desktop menu */}
-                <nav className="hidden md:flex items-center gap-3">
-                    <Link
-                        href="/dashboard"
-                        className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-800"
-                    >
-                        Dashboard
-                    </Link>
-
-                    <Link
-                        href="/character/select"
-                        className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-800"
-                    >
-                        Characters
-                    </Link>
-
-                    <Link
-                        href="/missions"
-                        className="rounded-xl bg-indigo-500 px-4 py-2 font-medium hover:bg-indigo-400"
-                    >
-                        Missions
-                    </Link>
-
-                    <Link
-                        href="/reports/weekly"
-                        className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-800"
-                    >
-                        Report
-                    </Link>
-
-                    <Link
-                        href="/focus"
-                        className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-800"
-                    >
-                        Focus
-                    </Link>
-
-                    <Link
-                        href="/calendar"
-                        className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-800"
-                    >
-                        Calendar
-                    </Link>
-
-                    {isAdmin && (
-                        <Link
-                            href="/admin"
-                            className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 font-medium text-amber-700 hover:bg-amber-100"
-                        >
-                            Admin
-                        </Link>
-                    )}
-
-                    {notificationSupported && (
-                        <button
-                            onClick={handleNotificationToggle}
-                            disabled={notificationLoading}
-                            className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-800 disabled:opacity-50"
-                        >
-                            {notificationLoading
-                                ? "..."
-                                : notificationSubscribed
-                                    ? "Notify on"
-                                    : "Notify off"}
-                        </button>
-                    )}
-
-                    <button
-                        onClick={handleLogout}
-                        disabled={loggingOut}
-                        className="rounded-xl border border-red-500/30 bg-white px-4 py-2 font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-50"
-                    >
-                        {loggingOut ? "..." : "Logout"}
-                    </button>
-                </nav>
-
-                {/* Mobile burger button */}
                 <button
                     type="button"
                     onClick={() => setOpen((value) => !value)}
-                    className="md:hidden rounded-xl border border-slate-700 bg-white px-3 py-2 text-xl text-slate-800 hover:bg-slate-800"
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-xl text-slate-800 shadow-sm hover:bg-slate-100"
                     aria-label="Open menu"
+                    aria-expanded={open}
                 >
                     {open ? "✕" : "☰"}
                 </button>
             </div>
 
-            {/* Mobile dropdown menu */}
             {open && (
-                <div className="absolute right-0 top-full z-50 mt-3 w-56 rounded-2xl border border-slate-800 bg-slate-900 p-3 shadow-xl md:hidden">
+                <div className="absolute right-0 top-full z-50 mt-3 w-64 rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-xl">
                     <div className="flex flex-col gap-2">
                         <Link
                             href="/dashboard"
                             onClick={() => setOpen(false)}
-                            className="rounded-xl px-4 py-3 font-medium text-slate-700 hover:bg-slate-800"
+                            className="rounded-xl px-4 py-3 font-medium hover:bg-slate-100"
                         >
                             Dashboard
                         </Link>
@@ -235,15 +158,23 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                         <Link
                             href="/character/select"
                             onClick={() => setOpen(false)}
-                            className="rounded-xl px-4 py-3 font-medium text-slate-700 hover:bg-slate-800"
+                            className="rounded-xl px-4 py-3 font-medium hover:bg-slate-100"
                         >
                             Characters
                         </Link>
 
                         <Link
+                            href="/stats"
+                            onClick={() => setOpen(false)}
+                            className="rounded-xl px-4 py-3 font-medium hover:bg-slate-100"
+                        >
+                            Stats
+                        </Link>
+
+                        <Link
                             href="/missions"
                             onClick={() => setOpen(false)}
-                            className="rounded-xl bg-indigo-500 px-4 py-3 font-medium hover:bg-indigo-400"
+                            className="rounded-xl bg-indigo-500 px-4 py-3 font-medium text-white hover:bg-indigo-400"
                         >
                             Missions
                         </Link>
@@ -251,7 +182,7 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                         <Link
                             href="/reports/weekly"
                             onClick={() => setOpen(false)}
-                            className="rounded-xl px-4 py-3 font-medium text-slate-700 hover:bg-slate-800"
+                            className="rounded-xl px-4 py-3 font-medium hover:bg-slate-100"
                         >
                             Report
                         </Link>
@@ -259,7 +190,7 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                         <Link
                             href="/focus"
                             onClick={() => setOpen(false)}
-                            className="rounded-xl px-4 py-3 font-medium text-slate-700 hover:bg-slate-800"
+                            className="rounded-xl px-4 py-3 font-medium hover:bg-slate-100"
                         >
                             Focus
                         </Link>
@@ -267,9 +198,17 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                         <Link
                             href="/calendar"
                             onClick={() => setOpen(false)}
-                            className="rounded-xl px-4 py-3 font-medium text-slate-700 hover:bg-slate-800"
+                            className="rounded-xl px-4 py-3 font-medium hover:bg-slate-100"
                         >
                             Calendar
+                        </Link>
+
+                        <Link
+                            href="/settings"
+                            onClick={() => setOpen(false)}
+                            className="rounded-xl px-4 py-3 font-medium hover:bg-slate-100"
+                        >
+                            Settings
                         </Link>
 
                         {isAdmin && (
@@ -286,7 +225,7 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                             <button
                                 onClick={handleNotificationToggle}
                                 disabled={notificationLoading}
-                                className="text-left rounded-xl px-4 py-3 font-medium text-slate-700 hover:bg-slate-800 disabled:opacity-50"
+                                className="text-left rounded-xl px-4 py-3 font-medium hover:bg-slate-100 disabled:opacity-50"
                             >
                                 {notificationLoading
                                     ? "Updating..."
@@ -299,7 +238,7 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                         <button
                             onClick={handleLogout}
                             disabled={loggingOut}
-                            className="text-left rounded-xl px-4 py-3 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                            className="text-left rounded-xl px-4 py-3 font-medium text-red-500 hover:bg-red-50 disabled:opacity-50"
                         >
                             {loggingOut ? "Logging out..." : "Logout"}
                         </button>

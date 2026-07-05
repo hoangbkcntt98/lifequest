@@ -31,8 +31,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "LifeQuest", {
       body: data.body || "Bạn có mission cần kiểm tra hôm nay.",
-      icon: withBasePath("/favicon.ico"),
-      badge: withBasePath("/favicon.ico"),
+      icon: withBasePath("/images/logo.png"),
+      badge: withBasePath("/images/logo.png"),
       data: {
         url: withBasePath(data.url || "/dashboard"),
       },

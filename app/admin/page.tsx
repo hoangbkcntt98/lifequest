@@ -42,10 +42,18 @@ type AdminSubscription = {
   };
 };
 
+type PushTemplate = {
+  id: string;
+  type: "EVENT_START" | "MISSION_DAILY";
+  title: string;
+  body: string;
+};
+
 export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [attributes, setAttributes] = useState<AdminAttribute[]>([]);
   const [subscriptions, setSubscriptions] = useState<AdminSubscription[]>([]);
+  const [templates, setTemplates] = useState<PushTemplate[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -68,15 +76,17 @@ export default function AdminPage() {
     setError("");
 
     try {
-      const [userData, attributeData, notificationData] = await Promise.all([
+      const [userData, attributeData, notificationData, templateData] = await Promise.all([
         apiFetch<{ users: AdminUser[] }>("/api/admin/users"),
         apiFetch<{ attributes: AdminAttribute[] }>("/api/admin/attributes"),
         apiFetch<{ subscriptions: AdminSubscription[] }>("/api/admin/notifications"),
+        apiFetch<{ templates: PushTemplate[] }>("/api/admin/notifications/templates"),
       ]);
 
       setUsers(userData.users);
       setAttributes(attributeData.attributes);
       setSubscriptions(notificationData.subscriptions);
+      setTemplates(templateData.templates);
 
       if (!attributeUserId && userData.users.length > 0) {
         setAttributeUserId(userData.users[0].id);
@@ -95,13 +105,15 @@ export default function AdminPage() {
       apiFetch<{ users: AdminUser[] }>("/api/admin/users"),
       apiFetch<{ attributes: AdminAttribute[] }>("/api/admin/attributes"),
       apiFetch<{ subscriptions: AdminSubscription[] }>("/api/admin/notifications"),
+      apiFetch<{ templates: PushTemplate[] }>("/api/admin/notifications/templates"),
     ])
-      .then(([userData, attributeData, notificationData]) => {
+      .then(([userData, attributeData, notificationData, templateData]) => {
         if (ignore) return;
 
         setUsers(userData.users);
         setAttributes(attributeData.attributes);
         setSubscriptions(notificationData.subscriptions);
+        setTemplates(templateData.templates);
 
         if (userData.users.length > 0) {
           setAttributeUserId(userData.users[0].id);
@@ -285,6 +297,28 @@ export default function AdminPage() {
     }
   }
 
+  async function updateTemplate(template: PushTemplate) {
+    const title = window.prompt("Notification title template", template.title);
+    if (!title) return;
+    const body = window.prompt("Notification body template", template.body);
+    if (!body) return;
+
+    try {
+      await apiFetch("/api/admin/notifications/templates", {
+        method: "PATCH",
+        body: JSON.stringify({
+          type: template.type,
+          title,
+          body,
+        }),
+      });
+      setMessage("Notification template updated.");
+      await loadAdminData();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Cannot update template.");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-white px-6 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -377,6 +411,23 @@ export default function AdminPage() {
                 <button className="w-full rounded-xl bg-indigo-500 py-3 font-medium hover:bg-indigo-400">Send test notification</button>
               </form>
               <div className="mt-5 space-y-3">
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <h3 className="font-semibold">Templates</h3>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Variables: mission {"{remaining} {completed} {total}"} · event {"{eventTitle} {location} {date} {content}"}
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {templates.map((template) => (
+                      <div key={template.id} className="rounded-lg border border-slate-800 p-3">
+                        <div className="font-semibold">{template.type}</div>
+                        <div className="text-sm text-slate-300">{template.title}</div>
+                        <div className="text-xs text-slate-400">{template.body}</div>
+                        <button onClick={() => updateTemplate(template)} className="mt-2 rounded-lg border border-slate-700 bg-white px-3 py-2 text-sm hover:bg-slate-800">Edit template</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {subscriptions.length === 0 && (
                   <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-slate-400">No push subscriptions yet.</div>
                 )}

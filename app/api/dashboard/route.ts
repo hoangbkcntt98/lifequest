@@ -39,56 +39,66 @@ export async function GET() {
       );
     }
 
-    const attributes = await prisma.attribute.findMany({
-      where: {
-        userId: authUser.userId,
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
+    const [attributes, missions, todayEvents] = await Promise.all([
+      prisma.attribute.findMany({
+        where: {
+          userId: authUser.userId,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      }),
 
-    const missions = await prisma.mission.findMany({
-      where: {
-        userId: authUser.userId,
-        isActive: true,
-        OR: [
-          {
-            startDate: null,
-          },
-          {
-            startDate: {
-              lte: today,
+      prisma.mission.findMany({
+        where: {
+          userId: authUser.userId,
+          isActive: true,
+          OR: [
+            {
+              startDate: null,
+            },
+            {
+              startDate: {
+                lte: today,
+              },
+            },
+          ],
+          AND: [
+            {
+              OR: [
+                {
+                  endDate: null,
+                },
+                {
+                  endDate: {
+                    gte: today,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        include: {
+          attribute: true,
+          logs: {
+            where: {
+              completedDate: today,
             },
           },
-        ],
-        AND: [
-          {
-            OR: [
-              {
-                endDate: null,
-              },
-              {
-                endDate: {
-                  gte: today,
-                },
-              },
-            ],
-          },
-        ],
-      },
-      include: {
-        attribute: true,
-        logs: {
-          where: {
-            completedDate: today,
-          },
         },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+
+      prisma.calendarEvent.findMany({
+        where: {
+          userId: authUser.userId,
+          startDate: today,
+        },
+        orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
+      }),
+    ]);
 
     const todayMissions = missions.map((mission) => {
       const completed = mission.logs.length > 0;
@@ -102,6 +112,8 @@ export async function GET() {
         expReward: mission.expReward,
         goldReward: mission.goldReward,
         statReward: mission.statReward,
+        startDate: mission.startDate,
+        endDate: mission.endDate,
         isActive: mission.isActive,
         completed,
         attribute: {
@@ -161,12 +173,20 @@ export async function GET() {
       },
       attributes,
       todayMissions,
+      todayEvents: todayEvents.map((event) => ({
+        id: event.id,
+        title: event.title,
+        location: event.location,
+        startDate: event.startDate,
+        endDate: event.endDate,
+      })),
       streak,
       quote,
       summary: {
         totalMissionsToday: todayMissions.length,
         completedMissionsToday: todayMissions.filter((mission) => mission.completed)
           .length,
+        totalEventsToday: todayEvents.length,
         completionRate:
           todayMissions.length === 0
             ? 0

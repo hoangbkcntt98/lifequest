@@ -5,9 +5,16 @@ import { getCurrentUserFromCookie } from "@/lib/auth";
 
 const createAttributeSchema = z.object({
   name: z.string().min(1).max(30),
+  value: z.coerce.number().int().min(0).optional(),
   icon: z.string().max(10).optional().nullable(),
   color: z.string().max(30).optional().nullable(),
 });
+
+function getErrorCode(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error
+    ? error.code
+    : null;
+}
 
 export async function GET() {
   try {
@@ -73,12 +80,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, icon, color } = parsed.data;
+    const { name, value, icon, color } = parsed.data;
 
     const attribute = await prisma.attribute.create({
       data: {
         userId: authUser.userId,
         name,
+        value: value ?? 0,
         icon,
         color,
       },
@@ -91,10 +99,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("CREATE_ATTRIBUTE_ERROR", error);
 
-    if (error?.code === "P2002") {
+    if (getErrorCode(error) === "P2002") {
       return NextResponse.json(
         {
           message: "Attribute name already exists.",
