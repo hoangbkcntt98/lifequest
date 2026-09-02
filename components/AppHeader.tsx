@@ -118,7 +118,7 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
     }
 
     return (
-        <header className="relative mb-6 rounded-2xl border border-slate-800 bg-white/80 px-4 py-4 shadow-xl backdrop-blur md:px-5">
+        <header className="relative z-[100] isolate mb-6 rounded-2xl border border-slate-800 bg-white/80 px-4 py-4 shadow-xl backdrop-blur md:px-5">
             <div className="flex items-center justify-between gap-4">
                 <div>
                     <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
@@ -145,7 +145,7 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
             </div>
 
             {open && (
-                <div className="absolute right-0 top-full z-50 mt-3 w-64 rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-xl">
+                <div className="absolute right-0 top-full z-[1000] mt-3 w-64 rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-xl">
                     <div className="flex flex-col gap-2">
                         <Link
                             href="/dashboard"

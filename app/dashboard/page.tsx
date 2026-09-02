@@ -87,6 +87,7 @@ export default function DashboardPage() {
     const [completingId, setCompletingId] = useState<string | null>(null);
     const [rewardMessage, setRewardMessage] = useState("");
     const [selectedStatId, setSelectedStatId] = useState<string | null>(null);
+    const [expandedMissionIds, setExpandedMissionIds] = useState<Record<string, boolean>>({});
 
     const loadDashboard = useCallback(async () => {
         try {
@@ -137,6 +138,13 @@ export default function DashboardPage() {
         } finally {
             setCompletingId(null);
         }
+    }
+
+    function toggleMissionDetail(id: string) {
+        setExpandedMissionIds((current) => ({
+            ...current,
+            [id]: !current[id],
+        }));
     }
 
     if (error && !data) {
@@ -284,11 +292,23 @@ export default function DashboardPage() {
                 <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 rounded-2xl bg-slate-900 border border-slate-800 p-6">
                         <div className="flex items-center justify-between mb-5">
-                            <h2 className="text-xl font-bold">Today&apos;s Missions</h2>
-                            <div className="text-sm text-slate-400">
-                                {data.summary.completedMissionsToday}/
-                                {data.summary.totalMissionsToday} completed
+                            <div>
+                                <h2 className="text-xl font-bold">Today&apos;s Missions</h2>
+                                <div className="text-sm text-slate-400">
+                                    {data.summary.completedMissionsToday}/
+                                    {data.summary.totalMissionsToday} completed
+                                </div>
                             </div>
+                            <Link
+                                href="/missions"
+                                aria-label="Manage missions"
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm hover:bg-indigo-400 sm:w-auto sm:px-4"
+                            >
+                                <span aria-hidden="true">⚙</span>
+                                <span className="sr-only sm:not-sr-only sm:ml-2">
+                                    Manage
+                                </span>
+                            </Link>
                         </div>
 
                         <div className="space-y-3">
@@ -307,50 +327,66 @@ export default function DashboardPage() {
                                     className="rounded-xl bg-slate-950 border border-slate-800 p-4"
                                 >
                                     <div className="space-y-3">
-                                        <div className="flex min-w-0 items-start gap-2">
-                                            <span>{mission.attribute.icon}</span>
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <span className="shrink-0">{mission.attribute.icon}</span>
                                             <h3
                                                 className={`min-w-0 flex-1 font-semibold leading-snug ${mission.completed ? "line-through text-slate-500" : ""
                                                     }`}
                                             >
                                                 {mission.title}
                                             </h3>
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleMissionDetail(mission.id)}
+                                                aria-label={
+                                                    expandedMissionIds[mission.id]
+                                                        ? "Hide mission details"
+                                                        : "Show mission details"
+                                                }
+                                                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-800 bg-white text-slate-950 hover:bg-slate-100"
+                                            >
+                                                <span
+                                                    className={`transition-transform ${
+                                                        expandedMissionIds[mission.id] ? "rotate-180" : ""
+                                                    }`}
+                                                    aria-hidden="true"
+                                                >
+                                                    ↓
+                                                </span>
+                                            </button>
                                         </div>
 
-                                        <div className="text-sm text-slate-400 mt-1">
-                                            {mission.attribute.name} · {mission.difficulty} · +
-                                            {mission.expReward} EXP · +{mission.goldReward} Gold
-                                        </div>
+                                        {expandedMissionIds[mission.id] && (
+                                            <div className="space-y-3">
+                                                <div className="text-sm text-slate-400">
+                                                    {mission.attribute.name} · {mission.difficulty} · +
+                                                    {mission.expReward} EXP · +{mission.goldReward} Gold
+                                                </div>
 
-                                        <div className="text-xs text-slate-500">
-                                            Start: {formatMissionDate(mission.startDate) ?? "anytime"} · Due:{" "}
-                                            {formatMissionDate(mission.endDate) ?? "none"}
-                                        </div>
+                                                <div className="text-xs text-slate-500">
+                                                    Start: {formatMissionDate(mission.startDate) ?? "anytime"} · Due:{" "}
+                                                    {formatMissionDate(mission.endDate) ?? "none"}
+                                                </div>
 
-                                        <button
-                                            disabled={mission.completed || completingId === mission.id}
-                                            onClick={() => completeMission(mission.id)}
-                                            className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-medium sm:px-4 ${mission.completed
-                                                    ? "bg-emerald-500/20 text-emerald-300"
-                                                    : "bg-indigo-500 hover:bg-indigo-400"
-                                                } disabled:opacity-70`}
-                                            aria-label={mission.completed ? "Done" : "Complete mission"}
-                                        >
-                                            <span className="hidden sm:inline">
-                                                {mission.completed
-                                                    ? "Done"
-                                                    : completingId === mission.id
-                                                        ? "..."
-                                                        : "Complete"}
-                                            </span>
-                                            <span className="sm:hidden" aria-hidden="true">
-                                                {mission.completed
-                                                    ? "✓"
-                                                    : completingId === mission.id
-                                                        ? "..."
-                                                        : "✓"}
-                                            </span>
-                                        </button>
+                                                <button
+                                                    disabled={mission.completed || completingId === mission.id}
+                                                    onClick={() => completeMission(mission.id)}
+                                                    className={`inline-flex h-10 w-10 items-center justify-center rounded-xl text-sm font-medium ${mission.completed
+                                                            ? "bg-emerald-500/20 text-emerald-300"
+                                                            : "bg-indigo-500 hover:bg-indigo-400"
+                                                        } disabled:opacity-70`}
+                                                    aria-label={mission.completed ? "Done" : "Complete mission"}
+                                                >
+                                                    <span aria-hidden="true">
+                                                        {mission.completed
+                                                            ? "✓"
+                                                            : completingId === mission.id
+                                                                ? "..."
+                                                                : "✓"}
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}

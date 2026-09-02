@@ -16,15 +16,49 @@ const UPLOAD_ROOT = path.join(process.cwd(), "public", "uploads", "music");
 const MAX_FILE_SIZE = 350 * 1024 * 1024;
 const MAX_MULTIPART_OVERHEAD = 2 * 1024 * 1024;
 const ALLOWED_TYPES = new Set([
+  "audio/aac",
+  "audio/ac3",
+  "audio/aiff",
+  "audio/amr",
+  "audio/basic",
+  "audio/flac",
+  "audio/m4a",
   "audio/mpeg",
   "audio/mp3",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/ogg",
-  "audio/webm",
   "audio/mp4",
-  "audio/aac",
-  "audio/flac",
+  "audio/ogg",
+  "audio/opus",
+  "audio/vnd.wave",
+  "audio/wav",
+  "audio/webm",
+  "audio/x-aac",
+  "audio/x-aiff",
+  "audio/x-flac",
+  "audio/x-m4a",
+  "audio/x-ms-wma",
+  "audio/x-wav",
+  "audio/x-wma",
+]);
+const ALLOWED_EXTENSIONS = new Set([
+  ".aac",
+  ".ac3",
+  ".aif",
+  ".aifc",
+  ".aiff",
+  ".amr",
+  ".au",
+  ".flac",
+  ".m4a",
+  ".m4b",
+  ".mp3",
+  ".mp4",
+  ".oga",
+  ".ogg",
+  ".opus",
+  ".wav",
+  ".weba",
+  ".webm",
+  ".wma",
 ]);
 
 type MusicTrack = {
@@ -112,6 +146,14 @@ function sanitizeRename(name: string, currentFileName: string) {
     .slice(0, 80);
 
   return `${baseName || "track"}${ext}`;
+}
+
+function isAllowedAudioFile(mimeType: string, fileName: string) {
+  if (mimeType.startsWith("audio/")) return true;
+
+  const ext = path.extname(fileName).toLowerCase();
+
+  return ALLOWED_TYPES.has(mimeType) || ALLOWED_EXTENSIONS.has(ext);
 }
 
 async function listTracks(currentUserId: string): Promise<MusicTrack[]> {
@@ -327,7 +369,7 @@ async function parseStreamingUpload(
 
       fileFound = true;
 
-      if (!ALLOWED_TYPES.has(info.mimeType)) {
+      if (!isAllowedAudioFile(info.mimeType, info.filename)) {
         fail(new Error("Unsupported audio format."));
         file.resume();
         return;

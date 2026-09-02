@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import AppHeader from "@/components/AppHeader";
 import { apiFetch } from "@/lib/api";
 
@@ -13,12 +13,51 @@ type Stat = {
 };
 
 const DEFAULT_COLOR = "#6366f1";
+const EMOJI_OPTIONS = [
+  { emoji: "💪", keywords: "strength muscle gym power force" },
+  { emoji: "🧠", keywords: "mind intelligence brain knowledge learning" },
+  { emoji: "🎯", keywords: "focus target goal aim precision" },
+  { emoji: "📚", keywords: "study book education learning reading" },
+  { emoji: "🗣️", keywords: "language speaking communication english japanese" },
+  { emoji: "🇯🇵", keywords: "japanese japan language nihongo" },
+  { emoji: "✍️", keywords: "writing journal notes practice" },
+  { emoji: "💻", keywords: "coding computer programming tech work" },
+  { emoji: "🧘", keywords: "calm meditation mindfulness balance" },
+  { emoji: "🏃", keywords: "running cardio speed exercise" },
+  { emoji: "🚴", keywords: "cycling bike endurance exercise" },
+  { emoji: "🏋️", keywords: "weight lifting gym strength" },
+  { emoji: "🥗", keywords: "nutrition food health diet vegetable" },
+  { emoji: "💧", keywords: "water hydration drink health" },
+  { emoji: "😴", keywords: "sleep rest recovery bedtime" },
+  { emoji: "🔥", keywords: "streak fire motivation energy" },
+  { emoji: "⚡", keywords: "energy lightning fast power" },
+  { emoji: "🌱", keywords: "growth habit nature plant" },
+  { emoji: "🏆", keywords: "achievement trophy win success" },
+  { emoji: "⭐", keywords: "star favorite quality excellence" },
+  { emoji: "💎", keywords: "discipline diamond value rare" },
+  { emoji: "🛡️", keywords: "defense resilience protection" },
+  { emoji: "🧩", keywords: "problem solving puzzle logic" },
+  { emoji: "🎨", keywords: "creative art design drawing" },
+  { emoji: "🎵", keywords: "music audio song practice" },
+  { emoji: "🎧", keywords: "listening audio music focus" },
+  { emoji: "📈", keywords: "progress growth chart improvement" },
+  { emoji: "⏱️", keywords: "time speed pomodoro focus" },
+  { emoji: "🧹", keywords: "clean organize chores tidy" },
+  { emoji: "💰", keywords: "money finance gold budget" },
+  { emoji: "🤝", keywords: "social relationship teamwork help" },
+  { emoji: "❤️", keywords: "heart kindness health love" },
+  { emoji: "🧪", keywords: "science experiment research" },
+  { emoji: "🌍", keywords: "world travel global geography" },
+  { emoji: "🚀", keywords: "launch ambition progress startup" },
+  { emoji: "🧭", keywords: "direction adventure navigation purpose" },
+];
 
 export default function StatsPage() {
   const [stats, setStats] = useState<Stat[]>([]);
   const [name, setName] = useState("");
   const [value, setValue] = useState(0);
   const [icon, setIcon] = useState("");
+  const [iconSearch, setIconSearch] = useState("");
   const [color, setColor] = useState(DEFAULT_COLOR);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -36,6 +75,18 @@ export default function StatsPage() {
       setLoading(false);
     }
   }, []);
+
+  const filteredEmojiOptions = useMemo(() => {
+    const query = iconSearch.trim().toLowerCase();
+
+    if (!query) return EMOJI_OPTIONS;
+
+    return EMOJI_OPTIONS.filter(
+      (option) =>
+        option.emoji.includes(query) ||
+        option.keywords.toLowerCase().includes(query)
+    );
+  }, [iconSearch]);
 
   useEffect(() => {
     let ignore = false;
@@ -82,6 +133,7 @@ export default function StatsPage() {
       setName("");
       setValue(0);
       setIcon("");
+      setIconSearch("");
       setColor(DEFAULT_COLOR);
       setMessage("Stat created.");
       await loadStats();
@@ -194,14 +246,42 @@ export default function StatsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm text-slate-300">Icon</label>
-                <input
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-indigo-500"
-                  value={icon}
-                  onChange={(event) => setIcon(event.target.value)}
-                  placeholder="⭐"
-                  maxLength={10}
-                />
+                <label className="text-sm text-slate-300">Selected icon</label>
+                <div className="grid h-12 place-items-center rounded-xl border border-slate-700 bg-slate-950 text-2xl">
+                  {icon || "•"}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm text-slate-300">Search icon</label>
+              <input
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-indigo-500"
+                value={iconSearch}
+                onChange={(event) => setIconSearch(event.target.value)}
+                placeholder="focus, study, health, music..."
+              />
+              <div className="grid max-h-48 grid-cols-6 gap-2 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3">
+                {filteredEmojiOptions.map((option) => (
+                  <button
+                    key={`${option.emoji}-${option.keywords}`}
+                    type="button"
+                    onClick={() => setIcon(option.emoji)}
+                    title={option.keywords}
+                    className={`grid h-10 place-items-center rounded-lg text-xl hover:bg-slate-800 ${
+                      icon === option.emoji
+                        ? "bg-indigo-500 text-white"
+                        : "bg-white/70"
+                    }`}
+                  >
+                    {option.emoji}
+                  </button>
+                ))}
+                {filteredEmojiOptions.length === 0 && (
+                  <div className="col-span-6 py-3 text-center text-sm text-slate-400">
+                    No icon found.
+                  </div>
+                )}
               </div>
             </div>
 

@@ -55,12 +55,45 @@ type CompleteMissionResponse = {
   };
 };
 
+type FocusRewardResponse = {
+  reward: {
+    gold: number;
+  };
+};
+
 const TIMER_PRESETS: Record<TimerMode, { label: string; minutes: number }> = {
   focus: { label: "Focus", minutes: 25 },
   shortBreak: { label: "Short break", minutes: 5 },
   longBreak: { label: "Long break", minutes: 15 },
 };
 const MAX_AUDIO_FILE_SIZE = 350 * 1024 * 1024;
+const MAX_BACKGROUND_FILE_SIZE = 5 * 1024 * 1024;
+const FOCUS_MINUTES_STORAGE_KEY = "lifequest-focus-minutes";
+const FOCUS_BACKGROUND_STORAGE_KEY = "lifequest-focus-background";
+const FOCUS_MINUTE_OPTIONS = Array.from(
+  { length: 8 },
+  (_, index) => (index + 1) * 25
+);
+
+function getInitialFocusMinutes() {
+  if (typeof window === "undefined") return TIMER_PRESETS.focus.minutes;
+
+  const savedValue = Number(window.localStorage.getItem(FOCUS_MINUTES_STORAGE_KEY));
+
+  if (!Number.isFinite(savedValue)) return TIMER_PRESETS.focus.minutes;
+
+  const closestOption =
+    Math.round(savedValue / TIMER_PRESETS.focus.minutes) *
+    TIMER_PRESETS.focus.minutes;
+
+  return Math.min(200, Math.max(25, closestOption));
+}
+
+function getInitialFocusBackground() {
+  if (typeof window === "undefined") return "";
+
+  return window.localStorage.getItem(FOCUS_BACKGROUND_STORAGE_KEY) ?? "";
+}
 
 function formatTime(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -143,10 +176,14 @@ export default function FocusPage() {
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [selectedTrackUrl, setSelectedTrackUrl] = useState("");
   const [mode, setMode] = useState<TimerMode>("focus");
-  const [secondsLeft, setSecondsLeft] = useState(TIMER_PRESETS.focus.minutes * 60);
+  const [focusMinutes, setFocusMinutes] = useState(getInitialFocusMinutes);
+  const [secondsLeft, setSecondsLeft] = useState(focusMinutes * 60);
   const [running, setRunning] = useState(false);
   const [completedSessions, setCompletedSessions] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
+  const [pomodoroBackground, setPomodoroBackground] = useState(
+    getInitialFocusBackground
+  );
   const [volume, setVolume] = useState(0.7);
   const [loop, setLoop] = useState(true);
   const [loadingTracks, setLoadingTracks] = useState(true);
@@ -170,6 +207,27 @@ export default function FocusPage() {
     () => missions.find((mission) => mission.id === selectedMissionId),
     [missions, selectedMissionId]
   );
+
+  const awardPomodoroGold = useCallback(async (minutes: number) => {
+    try {
+      const result = await apiFetch<FocusRewardResponse>("/api/focus/reward", {
+        method: "POST",
+        body: JSON.stringify({
+          minutes,
+        }),
+      });
+
+      setMessage(
+        `Pomodoro complete. +${result.reward.gold} Gold for your focus.`
+      );
+    } catch (rewardError) {
+      setError(
+        rewardError instanceof Error
+          ? rewardError.message
+          : "Cannot add Pomodoro gold reward."
+      );
+    }
+  }, []);
 
   const completeAttachedMission = useCallback(async () => {
     if (!selectedMissionId || completingMission) return;
@@ -306,6 +364,7 @@ export default function FocusPage() {
           if (mode === "focus") {
             setCompletedSessions((count) => count + 1);
             void showFocusCompleteNotification(selectedMission?.title);
+            void awardPomodoroGold(focusMinutes);
           }
 
           setMessage(`${TIMER_PRESETS[mode].label} session complete.`);
@@ -317,13 +376,32 @@ export default function FocusPage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [mode, running, selectedMission?.title]);
+  }, [awardPomodoroGold, focusMinutes, mode, running, selectedMission?.title]);
 
   function switchMode(nextMode: TimerMode) {
     setMode(nextMode);
     setRunning(false);
-    setSecondsLeft(TIMER_PRESETS[nextMode].minutes * 60);
+    setSecondsLeft(
+      (nextMode === "focus" ? focusMinutes : TIMER_PRESETS[nextMode].minutes) *
+        60
+    );
     setMessage("");
+  }
+
+  function updateFocusMinutes(value: string) {
+    const requestedMinutes = Number(value);
+    const nextMinutes = FOCUS_MINUTE_OPTIONS.includes(requestedMinutes)
+      ? requestedMinutes
+      : TIMER_PRESETS.focus.minutes;
+
+    setFocusMinutes(nextMinutes);
+    window.localStorage.setItem(FOCUS_MINUTES_STORAGE_KEY, String(nextMinutes));
+
+    if (mode === "focus") {
+      setRunning(false);
+      setSecondsLeft(nextMinutes * 60);
+      setMessage("");
+    }
   }
 
   function toggleTimer() {
@@ -341,8 +419,63 @@ export default function FocusPage() {
 
   function resetTimer() {
     setRunning(false);
-    setSecondsLeft(TIMER_PRESETS[mode].minutes * 60);
+    setSecondsLeft(
+      (mode === "focus" ? focusMinutes : TIMER_PRESETS[mode].minutes) * 60
+    );
     setMessage("");
+  }
+
+  function handleBackgroundUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file for the Pomodoro background.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_BACKGROUND_FILE_SIZE) {
+      setError("Background image must be 5MB or smaller.");
+      event.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+
+      if (!dataUrl) {
+        setError("Cannot load background image.");
+        return;
+      }
+
+      try {
+        window.localStorage.setItem(FOCUS_BACKGROUND_STORAGE_KEY, dataUrl);
+      } catch {
+        setError("Background image is too large to save in this browser.");
+        return;
+      }
+
+      setPomodoroBackground(dataUrl);
+      setError("");
+      setMessage("Pomodoro background updated.");
+      event.target.value = "";
+    };
+
+    reader.onerror = () => {
+      setError("Cannot load background image.");
+      event.target.value = "";
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  function clearPomodoroBackground() {
+    window.localStorage.removeItem(FOCUS_BACKGROUND_STORAGE_KEY);
+    setPomodoroBackground("");
+    setMessage("Pomodoro background removed.");
   }
 
   function uploadTrack(file: File) {
@@ -512,6 +645,15 @@ export default function FocusPage() {
       className={`min-h-screen bg-slate-950 text-white px-6 py-8 ${
         focusMode ? "fixed inset-0 z-50 overflow-y-auto" : ""
       }`}
+      style={
+        focusMode && pomodoroBackground
+          ? {
+              backgroundImage: `linear-gradient(180deg, rgba(15, 23, 42, 0.28), rgba(15, 23, 42, 0.52)), url(${pomodoroBackground})`,
+              backgroundPosition: "center",
+              backgroundSize: "cover",
+            }
+          : undefined
+      }
     >
       <div className={focusMode ? "mx-auto max-w-4xl space-y-6" : "mx-auto max-w-6xl space-y-6"}>
         {!focusMode && (
@@ -522,34 +664,72 @@ export default function FocusPage() {
         )}
 
         {focusMode && (
-          <div className="flex items-center justify-between rounded-2xl border border-slate-800 bg-white/90 p-4 shadow-xl">
-            <div>
-              <div className="text-sm font-semibold text-indigo-400">Focus Mode</div>
-              <h1 className="text-2xl font-bold">LifeQuest deep work</h1>
-            </div>
+          <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center text-center">
             <button
               onClick={() => setFocusMode(false)}
-              className="rounded-xl border border-slate-700 bg-white px-4 py-2 font-medium hover:bg-slate-800"
+              aria-label="Exit focus mode"
+              className="absolute right-5 top-5 grid h-11 w-11 place-items-center rounded-full border border-white/40 bg-white/80 text-xl font-bold text-slate-950 shadow-xl hover:bg-white"
             >
-              Exit
+              ×
             </button>
+            <div className="rounded-full border-8 border-white/50 bg-white/90 px-10 py-12 shadow-xl backdrop-blur">
+              <div className="text-6xl font-black text-slate-950 md:text-8xl">
+                {formatTime(secondsLeft)}
+              </div>
+            </div>
+            <div className="mt-6 max-w-3xl rounded-full bg-white/85 px-6 py-3 text-lg font-bold text-slate-950 shadow-xl backdrop-blur">
+              {selectedMission ? selectedMission.title : "No mission attached"}
+            </div>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              <button
+                onClick={toggleTimer}
+                className="rounded-xl bg-indigo-500 px-8 py-3 font-semibold text-white shadow-xl hover:bg-indigo-400"
+              >
+                {running ? "Pause" : "Start"}
+              </button>
+              <button
+                onClick={resetTimer}
+                className="rounded-xl border border-white/50 bg-white/85 px-8 py-3 font-semibold text-slate-950 shadow-xl hover:bg-white"
+              >
+                Reset
+              </button>
+            </div>
           </div>
         )}
 
-        {error && (
+        {!focusMode && error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
             {error}
           </div>
         )}
 
-        {message && (
+        {!focusMode && message && (
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-emerald-300">
             {message}
           </div>
         )}
 
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+        <section
+          className={
+            focusMode
+              ? "fixed bottom-5 left-1/2 z-[60] w-[min(92vw,28rem)] -translate-x-1/2"
+              : "grid grid-cols-1 gap-6 lg:grid-cols-3"
+          }
+        >
+          <div
+            className={`lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl ${
+              focusMode ? "hidden" : ""
+            }`}
+            style={
+              pomodoroBackground
+                ? {
+                    backgroundImage: `linear-gradient(180deg, rgba(248, 251, 255, 0.88), rgba(248, 251, 255, 0.72)), url(${pomodoroBackground})`,
+                    backgroundPosition: "center",
+                    backgroundSize: "cover",
+                  }
+                : undefined
+            }
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-indigo-400">
@@ -589,12 +769,52 @@ export default function FocusPage() {
                         : "border-slate-700 bg-white hover:bg-slate-800"
                     }`}
                   >
-                    {TIMER_PRESETS[preset].minutes}m
+                    {preset === "focus" ? focusMinutes : TIMER_PRESETS[preset].minutes}m
                     <span className="block text-xs font-medium opacity-75">
                       {TIMER_PRESETS[preset].label}
                     </span>
                   </button>
                 ))}
+              </div>
+
+              <div className="mt-5 grid w-full max-w-xl grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+                <label className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-left">
+                  <span className="block text-sm font-semibold text-indigo-300">
+                    Focus minutes
+                  </span>
+                  <select
+                    value={focusMinutes}
+                    onChange={(event) => updateFocusMinutes(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-lg font-bold outline-none focus:border-indigo-500"
+                  >
+                    {FOCUS_MINUTE_OPTIONS.map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes} minutes
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="flex items-stretch gap-2 md:flex-col">
+                  <label className="inline-flex flex-1 cursor-pointer items-center justify-center rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-400 md:flex-none">
+                    Background
+                    <input
+                      className="hidden"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBackgroundUpload}
+                    />
+                  </label>
+                  {pomodoroBackground && (
+                    <button
+                      type="button"
+                      onClick={clearPomodoroBackground}
+                      className="rounded-xl border border-slate-700 bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-800"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -686,40 +906,45 @@ export default function FocusPage() {
                   </div>
                 )}
 
-                <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-slate-400">
-                  Bấm Complete khi bạn muốn nhận reward cho mission đã attach.
-                </div>
               </div>
             </div>
           </div>
 
-          <aside className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-indigo-400">
-                  Music
+          <aside
+            className={
+              focusMode
+                ? "rounded-2xl border border-white/40 bg-white/90 p-3 text-slate-950 shadow-xl backdrop-blur"
+                : "rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl"
+            }
+          >
+            {!focusMode && (
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-indigo-400">
+                    Music
+                  </div>
+                  <h2 className="mt-1 text-xl font-bold">Focus playlist</h2>
                 </div>
-                <h2 className="mt-1 text-xl font-bold">Focus playlist</h2>
+                <label
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold hover:bg-indigo-400 ${
+                    uploading ? "pointer-events-none opacity-80" : ""
+                  }`}
+                >
+                  {uploading && <span className="lifequest-spinner light" />}
+                  {uploading ? "Uploading" : "Upload"}
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="audio/*"
+                    disabled={uploading}
+                    onChange={handleUpload}
+                  />
+                </label>
               </div>
-              <label
-                className={`inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold hover:bg-indigo-400 ${
-                  uploading ? "pointer-events-none opacity-80" : ""
-                }`}
-              >
-                {uploading && <span className="lifequest-spinner light" />}
-                {uploading ? "Uploading" : "Upload"}
-                <input
-                  className="hidden"
-                  type="file"
-                  accept="audio/*"
-                  disabled={uploading}
-                  onChange={handleUpload}
-                />
-              </label>
-            </div>
+            )}
 
             <div className="mt-5 space-y-3">
-              {(uploading || uploadProgress > 0) && (
+              {!focusMode && (uploading || uploadProgress > 0) && (
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
                   <div className="flex items-center justify-between text-sm font-medium">
                     <span className="inline-flex items-center gap-2">
@@ -740,7 +965,11 @@ export default function FocusPage() {
               <select
                 value={selectedTrackUrl}
                 onChange={(event) => setSelectedTrackUrl(event.target.value)}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-indigo-500"
+                className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-indigo-500 ${
+                  focusMode
+                    ? "border-slate-200 bg-white"
+                    : "border-slate-700 bg-slate-950"
+                }`}
               >
                 <option value="">No track selected</option>
                 {tracks.map((track) => (
@@ -758,42 +987,46 @@ export default function FocusPage() {
                 className="w-full"
               />
 
-              <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <span className="font-medium">Volume</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={volume}
-                  onChange={(event) => setVolume(Number(event.target.value))}
-                  className="w-32 accent-indigo-500"
-                />
-              </label>
+              {!focusMode && (
+                <>
+                  <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
+                    <span className="font-medium">Volume</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={volume}
+                      onChange={(event) => setVolume(Number(event.target.value))}
+                      className="w-32 accent-indigo-500"
+                    />
+                  </label>
 
-              <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <span className="font-medium">Loop music</span>
-                <input
-                  type="checkbox"
-                  checked={loop}
-                  onChange={(event) => setLoop(event.target.checked)}
-                  className="h-5 w-5 accent-indigo-500"
-                />
-              </label>
+                  <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
+                    <span className="font-medium">Loop music</span>
+                    <input
+                      type="checkbox"
+                      checked={loop}
+                      onChange={(event) => setLoop(event.target.checked)}
+                      className="h-5 w-5 accent-indigo-500"
+                    />
+                  </label>
 
-              {selectedTrack && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
-                  <div className="font-semibold">{selectedTrack.name}</div>
-                  <div className="mt-1 text-sm">
-                    {formatSize(selectedTrack.size)} uploaded{" "}
-                    {new Date(selectedTrack.uploadedAt).toLocaleDateString()}
-                  </div>
-                  <div className="mt-1 text-sm">
-                    Uploaded by {selectedTrack.uploadedBy.email}
-                  </div>
-                </div>
+                  {selectedTrack && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+                      <div className="font-semibold">{selectedTrack.name}</div>
+                      <div className="mt-1 text-sm">
+                        {formatSize(selectedTrack.size)} uploaded{" "}
+                        {new Date(selectedTrack.uploadedAt).toLocaleDateString()}
+                      </div>
+                      <div className="mt-1 text-sm">
+                        Uploaded by {selectedTrack.uploadedBy.email}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
-            </div>
+                  </div>
           </aside>
         </section>
 

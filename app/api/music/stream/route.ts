@@ -37,13 +37,21 @@ function getSafeTrackId(trackId: string | null) {
 function getContentType(fileName: string) {
   const ext = path.extname(fileName).toLowerCase();
 
-  if (ext === ".mp3") return "audio/mpeg";
-  if (ext === ".wav") return "audio/wav";
-  if (ext === ".ogg") return "audio/ogg";
-  if (ext === ".webm") return "audio/webm";
-  if (ext === ".m4a" || ext === ".mp4") return "audio/mp4";
   if (ext === ".aac") return "audio/aac";
+  if (ext === ".ac3") return "audio/ac3";
+  if (ext === ".aif" || ext === ".aifc" || ext === ".aiff") {
+    return "audio/aiff";
+  }
+  if (ext === ".amr") return "audio/amr";
+  if (ext === ".au") return "audio/basic";
   if (ext === ".flac") return "audio/flac";
+  if (ext === ".m4a" || ext === ".m4b" || ext === ".mp4") return "audio/mp4";
+  if (ext === ".mp3") return "audio/mpeg";
+  if (ext === ".oga" || ext === ".ogg") return "audio/ogg";
+  if (ext === ".opus") return "audio/opus";
+  if (ext === ".wav") return "audio/wav";
+  if (ext === ".weba" || ext === ".webm") return "audio/webm";
+  if (ext === ".wma") return "audio/x-ms-wma";
 
   return "application/octet-stream";
 }
