@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserFromCookie } from "@/lib/auth";
 import { formatDateKey } from "@/lib/date";
+import { getSelectedCharacter } from "@/lib/character/session";
 
 function getCurrentTokyoYearMonth() {
   const now = new Date();
@@ -70,11 +71,19 @@ export async function GET(request: NextRequest) {
 
     const { startDate, endDateExclusive } = getMonthRangeUTC(year, month);
     const days = getDaysInMonthUTC(year, month);
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
 
     const [logs, activeMissions, events] = await Promise.all([
       prisma.missionLog.findMany({
         where: {
-          userId: authUser.userId,
+          characterId: character.id,
           completedDate: {
             gte: startDate,
             lt: endDateExclusive,
@@ -94,7 +103,7 @@ export async function GET(request: NextRequest) {
 
       prisma.mission.findMany({
         where: {
-          userId: authUser.userId,
+          characterId: character.id,
           isActive: true,
         },
       }),

@@ -7,9 +7,9 @@ import { DEFAULT_ATTRIBUTES } from "@/lib/default-attributes";
 import { CHARACTER_COOKIE, getSelectedCharacter } from "@/lib/character/session";
 
 const createCharacterSchema = z.object({
-  name: z.string().min(1).max(30),
-  className: z.nativeEnum(CharacterClass).default(CharacterClass.ADVENTURER),
-  avatarUrl: z.string().url().optional().nullable(),
+ name: z.string().min(1).max(30),
+  className: z.nativeEnum(CharacterClass).default(CharacterClass.KIEM_TU),
+ avatarUrl: z.string().url().optional().nullable(),
 });
 
 export async function GET() {
@@ -37,7 +37,7 @@ export async function GET() {
 
     const attributes = await prisma.attribute.findMany({
       where: {
-        userId: authUser.userId,
+        characterId: selectedCharacter?.id ?? "",
       },
       orderBy: {
         createdAt: "asc",
@@ -101,29 +101,16 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const existingAttributes = await tx.attribute.count({
-        where: {
+      const attributes = await tx.attribute.createManyAndReturn({
+        data: DEFAULT_ATTRIBUTES.map((attribute) => ({
           userId: authUser.userId,
-        },
+          characterId: character.id,
+          name: attribute.name,
+          icon: attribute.icon,
+          color: attribute.color,
+          multiplier: attribute.multiplier,
+        })),
       });
-      const attributes =
-        existingAttributes === 0
-          ? await tx.attribute.createManyAndReturn({
-              data: DEFAULT_ATTRIBUTES.map((attribute) => ({
-                userId: authUser.userId,
-                name: attribute.name,
-                icon: attribute.icon,
-                color: attribute.color,
-              })),
-            })
-          : await tx.attribute.findMany({
-              where: {
-                userId: authUser.userId,
-              },
-              orderBy: {
-                createdAt: "asc",
-              },
-            });
 
       return {
         character,

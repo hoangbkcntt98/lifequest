@@ -5,6 +5,7 @@ import { getTodayInTokyoDateOnly } from "@/lib/date";
 import { calculateCurrentStreakFromLogs } from "@/lib/streak";
 import { getDailyQuoteIndex } from "@/lib/quote";
 import { getSelectedCharacter, getUserCharacterCount } from "@/lib/character/session";
+import { getRequiredExp } from "@/lib/level";
 
 export async function GET() {
   try {
@@ -42,7 +43,7 @@ export async function GET() {
     const [attributes, missions, todayEvents] = await Promise.all([
       prisma.attribute.findMany({
         where: {
-          userId: authUser.userId,
+          characterId: character.id,
         },
         orderBy: {
           createdAt: "asc",
@@ -51,7 +52,7 @@ export async function GET() {
 
       prisma.mission.findMany({
         where: {
-          userId: authUser.userId,
+          characterId: character.id,
           isActive: true,
           OR: [
             {
@@ -127,7 +128,7 @@ export async function GET() {
 
     const recentLogs = await prisma.missionLog.findMany({
       where: {
-        userId: authUser.userId,
+        characterId: character.id,
       },
       select: {
         completedDate: true,
@@ -158,7 +159,7 @@ export async function GET() {
       quote = quotes[0] ?? null;
     }
 
-    const requiredExp = character.level * 100;
+    const requiredExp = getRequiredExp(character.level);
 
     return NextResponse.json({
       character: {

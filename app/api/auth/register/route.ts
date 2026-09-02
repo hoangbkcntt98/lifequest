@@ -48,12 +48,12 @@ export async function POST(request: NextRequest) {
                 email,
                 passwordHash,
             },
-            select: {
-                id: true,
-                email: true,
-                createdAt: true,
-            },
-        });
+           select: {
+               id: true,
+               email: true,
+               createdAt: true,
+           },
+       });
 
         const token = signToken({
             userId: user.id,

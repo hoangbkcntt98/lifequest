@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin/auth";
 
 const updateAttributeSchema = z.object({
-  userId: z.string().min(1).optional(),
   name: z.string().min(1).max(30).optional(),
   value: z.number().int().min(0).optional(),
   icon: z.string().max(10).optional().nullable(),
@@ -39,7 +38,7 @@ export async function PATCH(
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") {
       return NextResponse.json(
-        { message: "Attribute name already exists for this user." },
+        { message: "Attribute name already exists for this character." },
         { status: 409 }
       );
     }

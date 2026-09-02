@@ -26,6 +26,12 @@ export async function GET() {
           email: true,
         },
       },
+      character: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       _count: {
         select: {
           missions: true,
@@ -52,15 +58,37 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const character = await prisma.character.findFirst({
+      where: {
+        userId: parsed.data.userId,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Create a character before adding attributes." },
+        { status: 400 }
+      );
+    }
+
     const attribute = await prisma.attribute.create({
-      data: parsed.data,
+      data: {
+        ...parsed.data,
+        characterId: character.id,
+      },
     });
 
     return NextResponse.json({ attribute }, { status: 201 });
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") {
       return NextResponse.json(
-        { message: "Attribute name already exists for this user." },
+        { message: "Attribute name already exists for this character." },
         { status: 409 }
       );
     }

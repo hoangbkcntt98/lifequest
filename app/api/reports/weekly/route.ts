@@ -7,6 +7,7 @@ import {
   getLastNDaysInTokyo,
 } from "@/lib/date";
 import { getSelectedCharacter, getUserCharacterCount } from "@/lib/character/session";
+import { getRequiredExp } from "@/lib/level";
 
 export async function GET() {
   try {
@@ -25,12 +26,29 @@ export async function GET() {
     const startDate = days[0];
     const endDateExclusive = addDaysUTC(days[days.length - 1], 1);
 
-    const [character, logs, activeMissions, attributes] = await Promise.all([
-      getSelectedCharacter(authUser.userId),
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      const characterCount = await getUserCharacterCount(authUser.userId);
+
+      return NextResponse.json(
+        {
+          message:
+            characterCount > 0
+              ? "Please select a character."
+              : "Character not found.",
+          needCreateCharacter: characterCount === 0,
+          needSelectCharacter: characterCount > 0,
+        },
+        { status: 404 }
+      );
+    }
+
+    const [logs, activeMissions, attributes] = await Promise.all([
 
       prisma.missionLog.findMany({
         where: {
-          userId: authUser.userId,
+          characterId: character.id,
           completedDate: {
             gte: startDate,
             lt: endDateExclusive,
@@ -50,36 +68,20 @@ export async function GET() {
 
       prisma.mission.findMany({
         where: {
-          userId: authUser.userId,
+          characterId: character.id,
           isActive: true,
         },
       }),
 
       prisma.attribute.findMany({
         where: {
-          userId: authUser.userId,
+          characterId: character.id,
         },
         orderBy: {
           createdAt: "asc",
         },
       }),
     ]);
-
-    if (!character) {
-      const characterCount = await getUserCharacterCount(authUser.userId);
-
-      return NextResponse.json(
-        {
-          message:
-            characterCount > 0
-              ? "Please select a character."
-              : "Character not found.",
-          needCreateCharacter: characterCount === 0,
-          needSelectCharacter: characterCount > 0,
-        },
-        { status: 404 }
-      );
-    }
 
     const logsByDate = new Map<string, typeof logs>();
 
@@ -170,7 +172,7 @@ export async function GET() {
         name: character.name,
         level: character.level,
         exp: character.exp,
-        requiredExp: character.level * 100,
+        requiredExp: getRequiredExp(character.level),
         gold: character.gold,
         className: character.className,
       },

@@ -364,7 +364,7 @@ export default function MissionsPage() {
 
                                             <div className="text-sm text-slate-400 mt-2">
                                                 {mission.attribute?.name} · {mission.difficulty} ·{" "}
-                                                {mission.repeatType} · +{mission.expReward} EXP · +
+                                                {mission.repeatType} · EXP theo chỉ số · +
                                                 {mission.goldReward} Gold · Stat +{mission.statReward}
                                             </div>
 

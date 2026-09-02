@@ -19,6 +19,7 @@ type AdminUser = {
 type AdminAttribute = {
   id: string;
   userId: string;
+  characterId: string;
   name: string;
   value: number;
   icon?: string | null;
@@ -26,6 +27,10 @@ type AdminAttribute = {
   user: {
     id: string;
     email: string;
+  };
+  character: {
+    id: string;
+    name: string;
   };
   _count?: {
     missions: number;

@@ -7,11 +7,9 @@ datasource db {
 }
 
 enum CharacterClass {
-  ADVENTURER
-  SCHOLAR
-  WARRIOR
-  MERCHANT
-  MONK
+  KIEM_TU
+  DAO_TU
+  THE_TU
 }
 
 enum MissionDifficulty {
@@ -135,7 +133,7 @@ model Character {
   userId    String
 
   name      String
-  className CharacterClass @default(ADVENTURER)
+  className CharacterClass @default(KIEM_TU)
   level     Int            @default(1)
   exp       Int            @default(0)
   gold      Int            @default(0)
@@ -145,6 +143,9 @@ model Character {
   updatedAt DateTime       @updatedAt
 
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attributes Attribute[]
+  missions   Mission[]
+  missionLogs MissionLog[]
 
   @@index([userId])
   @@map("characters")
@@ -153,9 +154,11 @@ model Character {
 model Attribute {
   id        String   @id @default(cuid())
   userId    String
+  characterId String
 
   name      String
   value     Int      @default(0)
+  multiplier Float    @default(1.0)
   color     String?
   icon      String?
 
@@ -163,15 +166,18 @@ model Attribute {
   updatedAt DateTime @updatedAt
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   missions  Mission[]
 
-  @@unique([userId, name])
+  @@unique([characterId, name])
+  @@index([characterId])
   @@map("attributes")
 }
 
 model Mission {
   id          String              @id @default(cuid())
   userId      String
+  characterId String
   attributeId String
 
   title       String
@@ -193,10 +199,12 @@ model Mission {
   updatedAt   DateTime            @updatedAt
 
   user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character   Character           @relation(fields: [characterId], references: [id], onDelete: Cascade)
   attribute   Attribute           @relation(fields: [attributeId], references: [id], onDelete: Cascade)
   logs        MissionLog[]
 
   @@index([userId])
+  @@index([characterId])
   @@index([attributeId])
   @@map("missions")
 }
@@ -205,6 +213,7 @@ model MissionLog {
   id            String           @id @default(cuid())
   missionId     String
   userId        String
+  characterId   String
 
   completedDate DateTime
   status        MissionLogStatus @default(COMPLETED)
@@ -217,10 +226,12 @@ model MissionLog {
   createdAt     DateTime         @default(now())
 
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character      Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
   mission        Mission         @relation(fields: [missionId], references: [id], onDelete: Cascade)
 
   @@unique([missionId, completedDate])
   @@index([userId])
+  @@index([characterId])
   @@index([completedDate])
   @@map("mission_logs")
 }

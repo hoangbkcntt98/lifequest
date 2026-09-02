@@ -7,34 +7,22 @@ import { apiFetch } from "@/lib/api";
 
 const classes = [
   {
-    value: "ADVENTURER",
-    label: "Adventurer",
-    icon: "🧭",
-    desc: "Cân bằng mọi lĩnh vực",
-  },
-  {
-    value: "SCHOLAR",
-    label: "Scholar",
-    icon: "📚",
-    desc: "Tập trung học tập",
-  },
-  {
-    value: "WARRIOR",
-    label: "Warrior",
+    value: "KIEM_TU",
+    label: "Kiếm Tu",
     icon: "⚔️",
-    desc: "Rèn luyện sức khỏe",
+    desc: "Tu luyện qua kiếm thuật, tập trung Strength và Discipline",
   },
   {
-    value: "MERCHANT",
-    label: "Merchant",
-    icon: "💰",
-    desc: "Quản lý tài chính",
+    value: "DAO_TU",
+    label: "Đạo Tu",
+    icon: "📚",
+    desc: "Tu luyện qua ngộ đạo, tập trung Wisdom và Intelligence",
   },
   {
-    value: "MONK",
-    label: "Monk",
-    icon: "🧘",
-    desc: "Kỷ luật và tinh thần",
+    value: "THE_TU",
+    label: "Thể Tu",
+    icon: "🥋",
+    desc: "Tu luyện qua rèn luyện thể chất, tập trung Strength và Creativity",
   },
 ];
 
@@ -42,7 +30,7 @@ export default function CreateCharacterPage() {
   const router = useRouter();
 
   const [name, setName] = useState("Hoang");
-  const [className, setClassName] = useState("ADVENTURER");
+  const [className, setClassName] = useState("KIEM_TU");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 

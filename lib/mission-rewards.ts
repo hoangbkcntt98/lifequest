@@ -26,3 +26,10 @@ export const MISSION_REWARDS = {
 export function getMissionRewardByDifficulty(difficulty: MissionDifficulty) {
   return MISSION_REWARDS[difficulty];
 }
+
+export function calculateExpWithMultiplier(
+  attributeValue: number,
+  attributeMultiplier: number
+): number {
+  return Math.max(1, Math.round(attributeValue * attributeMultiplier));
+}

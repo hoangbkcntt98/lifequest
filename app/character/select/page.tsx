@@ -20,6 +20,7 @@ export default function SelectCharacterPage() {
   const [selectedCharacterId, setSelectedCharacterId] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectingId, setSelectingId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -77,6 +78,39 @@ export default function SelectCharacterPage() {
     }
   }
 
+  async function deleteCharacter(character: Character) {
+    const confirmed = window.confirm(
+      `Xóa nhân vật "${character.name}"?\n\nToàn bộ stats, mission và lịch sử mission của nhân vật này sẽ bị xóa vĩnh viễn.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingId(character.id);
+    setError("");
+
+    try {
+      const data = await apiFetch<{ selectedCharacter: Character | null }>(
+        `/api/character/${character.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      setCharacters((current) =>
+        current.filter((currentCharacter) => currentCharacter.id !== character.id)
+      );
+      setSelectedCharacterId(data.selectedCharacter?.id ?? "");
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Cannot delete character."
+      );
+    } finally {
+      setDeletingId("");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-white px-6 py-10">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -116,15 +150,13 @@ export default function SelectCharacterPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {characters.map((character) => (
-              <button
+              <div
                 key={character.id}
-                onClick={() => selectCharacter(character.id)}
-                disabled={Boolean(selectingId)}
-                className={`rounded-2xl border bg-slate-900 p-6 text-left shadow-xl transition hover:-translate-y-0.5 ${
+                className={`rounded-2xl border bg-slate-900 p-6 text-left shadow-xl ${
                   selectedCharacterId === character.id
                     ? "border-indigo-500"
                     : "border-slate-800"
-                } disabled:opacity-70`}
+                }`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -151,14 +183,27 @@ export default function SelectCharacterPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 text-sm font-semibold text-indigo-400">
-                  {selectingId === character.id
-                    ? "Đang chọn..."
-                    : selectedCharacterId === character.id
-                      ? "Đang được chọn"
-                      : "Chọn character này"}
+                <div className="mt-5 flex gap-3">
+                  <button
+                    onClick={() => selectCharacter(character.id)}
+                    disabled={Boolean(selectingId || deletingId)}
+                    className="flex-1 rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {selectingId === character.id
+                      ? "Đang chọn..."
+                      : selectedCharacterId === character.id
+                        ? "Đang được chọn"
+                        : "Chọn character này"}
+                  </button>
+                  <button
+                    onClick={() => deleteCharacter(character)}
+                    disabled={Boolean(selectingId || deletingId)}
+                    className="rounded-xl border border-red-500/40 px-4 py-3 text-sm font-semibold text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deletingId === character.id ? "Đang xóa..." : "Xóa"}
+                  </button>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}

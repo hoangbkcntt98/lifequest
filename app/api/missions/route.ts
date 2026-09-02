@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserFromCookie } from "@/lib/auth";
 import { getMissionRewardByDifficulty } from "@/lib/mission-rewards";
+import { getSelectedCharacter } from "@/lib/character/session";
 
 const createMissionSchema = z.object({
   attributeId: z.string().min(1),
@@ -29,9 +30,18 @@ export async function GET() {
       );
     }
 
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
+
     const missions = await prisma.mission.findMany({
       where: {
-        userId: authUser.userId,
+        characterId: character.id,
       },
       include: {
         attribute: true,
@@ -100,10 +110,19 @@ export async function POST(request: NextRequest) {
       goldReward,
     } = parsed.data;
 
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
+
     const attribute = await prisma.attribute.findFirst({
       where: {
         id: attributeId,
-        userId: authUser.userId,
+        characterId: character.id,
       },
     });
 
@@ -132,6 +151,7 @@ export async function POST(request: NextRequest) {
     const mission = await prisma.mission.create({
       data: {
         userId: authUser.userId,
+        characterId: character.id,
         attributeId,
         title,
         description,

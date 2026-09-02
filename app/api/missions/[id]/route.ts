@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserFromCookie } from "@/lib/auth";
 import { getMissionRewardByDifficulty } from "@/lib/mission-rewards";
+import { getSelectedCharacter } from "@/lib/character/session";
 
 const updateMissionSchema = z.object({
   attributeId: z.string().min(1).optional(),
@@ -37,11 +38,19 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
 
     const mission = await prisma.mission.findFirst({
       where: {
         id,
-        userId: authUser.userId,
+        characterId: character.id,
       },
       include: {
         attribute: true,
@@ -106,10 +115,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
+
     const existingMission = await prisma.mission.findFirst({
       where: {
         id,
-        userId: authUser.userId,
+        characterId: character.id,
       },
     });
 
@@ -128,7 +146,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const attribute = await prisma.attribute.findFirst({
         where: {
           id: data.attributeId,
-          userId: authUser.userId,
+          characterId: character.id,
         },
       });
 
@@ -213,11 +231,19 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
 
     const existingMission = await prisma.mission.findFirst({
       where: {
         id,
-        userId: authUser.userId,
+        characterId: character.id,
       },
     });
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserFromCookie } from "@/lib/auth";
+import { getSelectedCharacter } from "@/lib/character/session";
 
 const createAttributeSchema = z.object({
   name: z.string().min(1).max(30),
@@ -29,9 +30,18 @@ export async function GET() {
       );
     }
 
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
+
     const attributes = await prisma.attribute.findMany({
       where: {
-        userId: authUser.userId,
+        characterId: character.id,
       },
       orderBy: {
         createdAt: "asc",
@@ -82,9 +92,19 @@ export async function POST(request: NextRequest) {
 
     const { name, value, icon, color } = parsed.data;
 
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
+
     const attribute = await prisma.attribute.create({
       data: {
         userId: authUser.userId,
+        characterId: character.id,
         name,
         value: value ?? 0,
         icon,

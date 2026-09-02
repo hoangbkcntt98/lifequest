@@ -4,6 +4,7 @@ import { getCurrentUserFromCookie } from "@/lib/auth";
 import { getTodayInTokyoDateOnly } from "@/lib/date";
 import { calculateLevelUp } from "@/lib/level";
 import { getSelectedCharacter } from "@/lib/character/session";
+import { calculateExpWithMultiplier } from "@/lib/mission-rewards";
 
 type RouteContext = {
   params: Promise<{
@@ -26,11 +27,19 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const today = getTodayInTokyoDateOnly();
+    const character = await getSelectedCharacter(authUser.userId);
+
+    if (!character) {
+      return NextResponse.json(
+        { message: "Selected character not found." },
+        { status: 404 }
+      );
+    }
 
     const mission = await prisma.mission.findFirst({
       where: {
         id,
-        userId: authUser.userId,
+        characterId: character.id,
         isActive: true,
       },
       include: {
@@ -66,35 +75,35 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const character = await getSelectedCharacter(authUser.userId);
+     const updatedAttribute = await tx.attribute.update({
+       where: {
+         id: mission.attributeId,
+       },
+       data: {
+         value: {
+           increment: mission.statReward,
+         },
+       },
+     });
 
-      if (!character) {
-        throw new Error("Selected character not found.");
-      }
+      const expWithMultiplier = calculateExpWithMultiplier(
+        updatedAttribute.value,
+        updatedAttribute.multiplier
+      );
 
       const missionLog = await tx.missionLog.create({
         data: {
           missionId: mission.id,
           userId: authUser.userId,
+          characterId: character.id,
           completedDate: today,
-          expEarned: mission.expReward,
+          expEarned: expWithMultiplier,
           goldEarned: mission.goldReward,
           statEarned: mission.statReward,
         },
       });
 
-      const updatedAttribute = await tx.attribute.update({
-        where: {
-          id: mission.attributeId,
-        },
-        data: {
-          value: {
-            increment: mission.statReward,
-          },
-        },
-      });
-
-      const rawExp = character.exp + mission.expReward;
+      const rawExp = character.exp + expWithMultiplier;
       const rawGold = character.gold + mission.goldReward;
 
       const levelResult = calculateLevelUp(character.level, rawExp);
@@ -110,16 +119,16 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         },
       });
 
-      return {
-        missionLog,
-        updatedAttribute,
-        updatedCharacter,
-        reward: {
-          exp: mission.expReward,
-          gold: mission.goldReward,
-          stat: mission.statReward,
-          attributeName: mission.attribute.name,
-        },
+    return {
+      missionLog,
+      updatedAttribute,
+      updatedCharacter,
+      reward: {
+        exp: expWithMultiplier,
+        gold: mission.goldReward,
+        stat: mission.statReward,
+        attributeName: mission.attribute.name,
+      },
         level: {
           before: character.level,
           after: updatedCharacter.level,

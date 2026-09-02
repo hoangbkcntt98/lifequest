@@ -1,27 +1,32 @@
 export const DEFAULT_ATTRIBUTES = [
   {
-    name: "Trí tuệ",
-    icon: "🧠",
-    color: "purple",
-  },
-  {
-    name: "Sức khỏe",
+    name: "Strength",
     icon: "💪",
-    color: "green",
+    multiplier: 1.2,
+    color: "#ef4444",
   },
   {
-    name: "Giáo dục",
+    name: "Intelligence",
+    icon: "🧠",
+    multiplier: 1.5,
+    color: "#3b82f6",
+  },
+  {
+    name: "Discipline",
+    icon: "🛡️",
+    multiplier: 1.0,
+    color: "#10b981",
+  },
+  {
+    name: "Creativity",
+    icon: "🎨",
+    multiplier: 1.3,
+    color: "#f59e0b",
+  },
+  {
+    name: "Wisdom",
     icon: "📚",
-    color: "blue",
-  },
-  {
-    name: "Đời sống",
-    icon: "🏠",
-    color: "orange",
-  },
-  {
-    name: "Tài chính",
-    icon: "💰",
-    color: "yellow",
+    multiplier: 1.8,
+    color: "#8b5cf6",
   },
 ];

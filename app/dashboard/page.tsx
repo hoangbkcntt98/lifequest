@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
+import { getLevelName } from "@/lib/level";
+import Image from "next/image";
+
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 type DashboardData = {
     character: {
@@ -20,10 +24,11 @@ type DashboardData = {
         id: string;
         name: string;
         value: number;
-        icon?: string | null;
-        color?: string | null;
-    }[];
-    todayMissions: {
+       icon?: string | null;
+       color?: string | null;
+       multiplier: number;
+   }[];
+   todayMissions: {
         id: string;
         title: string;
         description?: string | null;
@@ -202,35 +207,55 @@ export default function DashboardPage() {
                     </div>
                 )}
 
-                <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 rounded-2xl bg-slate-900 border border-slate-800 p-6">
-                        <div className="mb-4 grid grid-cols-2 gap-3 text-sm">
-                            <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
-                                <div className="text-slate-400">Missions today</div>
-                                <div className="mt-1 text-xl font-bold">
-                                    {data.summary.completedMissionsToday}/{data.summary.totalMissionsToday}
-                                </div>
-                            </div>
-                            <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
-                                <div className="text-slate-400">Events today</div>
-                                <div className="mt-1 text-xl font-bold">{data.summary.totalEventsToday}</div>
-                            </div>
-                        </div>
+               <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                   <div className="lg:col-span-2 rounded-2xl bg-slate-900 border border-slate-800 p-6">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+                            <Image
+                                src={`${BASE_PATH}/images/characters/level${data.character.level}.png`}
+                                alt={getLevelName(data.character.level)}
+                                width={200}
+                                height={200}
+                                className="order-2 self-center rounded-xl lg:order-1 lg:self-start"
+                            />
 
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <div className="text-sm text-slate-400">
-                                    {data.character.className}
-                                </div>
-                                <h2 className="text-3xl font-bold mt-1">
-                                    {data.character.name}
-                                </h2>
-                                <div className="text-indigo-300 mt-1">
-                                    Lv. {data.character.level}
-                                </div>
+                            <div className="order-1 flex-1 lg:order-2">
+                       <div className="mb-4 grid grid-cols-2 gap-2 text-xs sm:gap-3 sm:text-sm">
+                           <div className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 sm:px-4 sm:py-3">
+                               <div className="text-slate-400">Missions today</div>
+                               <div className="mt-0.5 text-base font-bold sm:mt-1 sm:text-xl">
+                                   {data.summary.completedMissionsToday}/{data.summary.totalMissionsToday}
+                               </div>
+                           </div>
+                           <div className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 sm:px-4 sm:py-3">
+                               <div className="text-slate-400">Events today</div>
+                               <div className="mt-0.5 text-base font-bold sm:mt-1 sm:text-xl">{data.summary.totalEventsToday}</div>
+                           </div>
+                       </div>
+
+                      <div className="hidden items-start justify-between lg:flex">
+                          <div>
+                              <div className="text-sm text-slate-400">
+                                  {data.character.className}
+                              </div>
+                              <h2 className="text-3xl font-bold mt-1">
+                                  {data.character.name}
+                              </h2>
+                              <div className="text-indigo-300 mt-1">
+                                   Lv. {data.character.level} - {getLevelName(data.character.level)}
+                              </div>
+                          </div>
+
+                      </div>
                             </div>
 
-                            <div className="text-5xl">🧙</div>
+                            <div className="order-3 text-center text-xs leading-relaxed lg:hidden">
+                                <div className="font-semibold text-slate-300">
+                                    {data.character.className} · {data.character.name}
+                                </div>
+                                <div className="text-indigo-300">
+                                    Lv. {data.character.level} · {getLevelName(data.character.level)}
+                                </div>
+                            </div>
                         </div>
 
                         {data.attributes.length > 0 && (
@@ -290,7 +315,7 @@ export default function DashboardPage() {
                 </section>
 
                 <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 rounded-2xl bg-slate-900 border border-slate-800 p-6">
+                    <div className="lg:col-span-3 rounded-2xl bg-slate-900 border border-slate-800 p-6">
                         <div className="flex items-center justify-between mb-5">
                             <div>
                                 <h2 className="text-xl font-bold">Today&apos;s Missions</h2>
@@ -359,8 +384,8 @@ export default function DashboardPage() {
                                         {expandedMissionIds[mission.id] && (
                                             <div className="space-y-3">
                                                 <div className="text-sm text-slate-400">
-                                                    {mission.attribute.name} · {mission.difficulty} · +
-                                                    {mission.expReward} EXP · +{mission.goldReward} Gold
+                                                    {mission.attribute.name} · {mission.difficulty} ·
+                                                    {" "}EXP theo chỉ số · +{mission.goldReward} Gold
                                                 </div>
 
                                                 <div className="text-xs text-slate-500">
@@ -393,25 +418,6 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    <div className="rounded-2xl bg-slate-900 border border-slate-800 p-6">
-                        <h2 className="text-xl font-bold mb-5">Stats</h2>
-
-                        <div className="space-y-3">
-                            {data.attributes.map((attribute) => (
-                                <div
-                                    key={attribute.id}
-                                    className="rounded-xl bg-slate-950 border border-slate-800 p-4 flex items-center justify-between"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <span>{attribute.icon}</span>
-                                        <span>{attribute.name}</span>
-                                    </div>
-
-                                    <div className="font-bold">{attribute.value}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
                 </section>
 
                 {selectedStat && (
